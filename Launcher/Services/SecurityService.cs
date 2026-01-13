@@ -27,7 +27,7 @@ namespace Launcher.Services
                 using (var rsa = RSA.Create(2048))
                 {
                     var request = new CertificateRequest(
-                        "CN=PoshWizard-Session", 
+                        "CN=PoshUI-Session", 
                         rsa, 
                         HashAlgorithmName.SHA256, 
                         RSASignaturePadding.Pkcs1);
@@ -88,14 +88,36 @@ namespace Launcher.Services
         {
             try
             {
-                // Test access to process - if we can access it, assume same user for now
-                // In production, this could use WMI or P/Invoke for more accurate checking
-                _ = process.ProcessName;
-                _ = process.StartTime;
-                return WindowsIdentity.GetCurrent().User;
+                // Use WMI for accurate process owner retrieval
+                using (var searcher = new System.Management.ManagementObjectSearcher(
+                    $"SELECT * FROM Win32_Process WHERE ProcessId = {process.Id}"))
+                {
+                    foreach (System.Management.ManagementObject obj in searcher.Get())
+                    {
+                        // Invoke GetOwner method
+                        var outParams = obj.InvokeMethod("GetOwner", null, null);
+
+                        if (outParams != null)
+                        {
+                            string domain = outParams["Domain"]?.ToString();
+                            string user = outParams["User"]?.ToString();
+
+                            if (!string.IsNullOrEmpty(user) && !string.IsNullOrEmpty(domain))
+                            {
+                                string accountName = $"{domain}\\{user}";
+                                var account = new System.Security.Principal.NTAccount(accountName);
+                                return (SecurityIdentifier)account.Translate(typeof(SecurityIdentifier));
+                            }
+                        }
+                    }
+                }
+
+                // Fallback: If WMI fails, return null
+                return null;
             }
-            catch
+            catch (Exception ex)
             {
+                LoggingService.Debug($"Failed to get process user via WMI for PID {process.Id}: {ex.Message}", "Security");
                 return null;
             }
         }
@@ -115,12 +137,12 @@ namespace Launcher.Services
             return expectedHash == hash;
         }
         
-        public static WizardMessage SignMessage(WizardMessage message, X509Certificate2 certificate, string sessionSecret)
+        public static UIMessage SignMessage(UIMessage message, X509Certificate2 certificate, string sessionSecret)
         {
             try
             {
                 // Create hash of message content without the hash field
-                var messageForHashing = new WizardMessage
+                var messageForHashing = new UIMessage
                 {
                     MessageId = message.MessageId,
                     SessionId = message.SessionId,
@@ -151,7 +173,7 @@ namespace Launcher.Services
             }
         }
         
-        public static bool VerifyMessageSignature(WizardMessage message, X509Certificate2 certificate)
+        public static bool VerifyMessageSignature(UIMessage message, X509Certificate2 certificate)
         {
             try
             {
@@ -160,9 +182,9 @@ namespace Launcher.Services
                     LoggingService.Warn($"Message {message.MessageId} has no signature", "Security");
                     return false;
                 }
-                
+
                 // Recreate message without hash for verification
-                var messageForVerification = new WizardMessage
+                var messageForVerification = new UIMessage
                 {
                     MessageId = message.MessageId,
                     SessionId = message.SessionId,
@@ -242,7 +264,7 @@ namespace Launcher.Services
                 }
                 
                 // Check subject
-                if (!certificate.Subject.Contains("PoshWizard-Session"))
+                if (!certificate.Subject.Contains("PoshUI-Session"))
                 {
                     LoggingService.Warn("Certificate subject is invalid", "Security");
                     return false;

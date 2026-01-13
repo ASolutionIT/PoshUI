@@ -708,9 +708,8 @@ namespace Launcher.ViewModels
                 _multiLineRows = info.MultiLineRows;
                 _isDynamic = info.IsDynamic; // Phase 2: Track dynamic parameters
                 
-                LoggingService.Info($"Parameter '{Name}': IsListBox={_isListBox}, IsMultiSelect={_isMultiSelect}, IsDynamic={_isDynamic}", component: "ParameterViewModel");
-
                 object defaultValue = info.DefaultValue;
+                
                 double? numericDefault = null;
                 if (_isNumeric && defaultValue != null && TryConvertToDouble(defaultValue, out double numericDefaultVal))
                 {
@@ -851,7 +850,16 @@ namespace Launcher.ViewModels
                     }
                     else if (defaultValue != null)
                     {
-                        Value = defaultValue.ToString();
+                        // For dynamic parameters without choices, don't set Value from defaultValue
+                        // as it might contain script text that should not be displayed
+                        if (!_isDynamic || (info.ValidateSetChoices != null && info.ValidateSetChoices.Any()))
+                        {
+                            Value = defaultValue.ToString();
+                        }
+                        else
+                        {
+                            LoggingService.Trace($"Skipping defaultValue for dynamic parameter '{Name}' - waiting for data source execution", component: "ParameterViewModel");
+                        }
                     }
                 }
 

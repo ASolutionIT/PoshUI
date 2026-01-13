@@ -31,7 +31,7 @@ namespace Launcher.ViewModels
     public class MainWindowViewModel : INotifyPropertyChanged
     {
         private int _currentStep = 1;
-        private string _windowTitle = "PoshWizard";
+        private string _windowTitle = "PoshUI";
         private object _currentPage;
         private string _nextButtonText = "Next";
         private bool _canGoBack = false;
@@ -45,7 +45,7 @@ namespace Launcher.ViewModels
 
         // Branding fields
         private string _windowTitleIconPath;
-        private string _sidebarHeaderText = "PoshWizard";
+        private string _sidebarHeaderText = "PoshUI";
         private string _sidebarHeaderIconPath;
         private string _sidebarHeaderIconGlyph;
         private string _sidebarHeaderIconOrientation = "Left";
@@ -140,6 +140,33 @@ namespace Launcher.ViewModels
             }
         }
 
+        /// <summary>
+        /// Gets or sets whether the sidebar is collapsed
+        /// </summary>
+        private bool _isSidebarCollapsed;
+        public bool IsSidebarCollapsed
+        {
+            get => _isSidebarCollapsed;
+            set
+            {
+                if (_isSidebarCollapsed == value) return;
+                _isSidebarCollapsed = value;
+                OnPropertyChanged(nameof(IsSidebarCollapsed));
+                OnPropertyChanged(nameof(IsSidebarHidden));
+            }
+        }
+
+        /// <summary>
+        /// Gets whether the sidebar should be completely hidden.
+        /// True when in Workflow mode (sidebar not needed during task execution).
+        /// </summary>
+        public bool IsSidebarHidden => IsWorkflowMode;
+
+        /// <summary>
+        /// Returns true when in Workflow execution mode.
+        /// </summary>
+        public bool IsWorkflowMode => CurrentPage is WorkflowViewModel;
+
         private static string NormalizeOrientation(string orientation)
         {
             var normalized = (orientation ?? string.Empty).Trim();
@@ -162,6 +189,102 @@ namespace Launcher.ViewModels
                     return "Left";
             }
         }
+
+        /// <summary>
+        /// Normalizes page type names for backward compatibility.
+        /// Maps old names (GenericForm, CardGrid, Card) to new names (Wizard, Dashboard, Workflow).
+        /// </summary>
+        private static string NormalizePageType(string pageType)
+        {
+            var normalized = (pageType ?? string.Empty).Trim().ToLowerInvariant();
+            switch (normalized)
+            {
+                case "wizard":
+                case "genericform":
+                    return "Wizard";
+                case "dashboard":
+                case "cardgrid":
+                    return "Dashboard";
+                case "workflow":
+                    return "Workflow";
+                default:
+                    return "Wizard"; // Default to Wizard
+            }
+        }
+
+        /// <summary>
+        /// Checks if a page type represents a Workflow execution step.
+        /// </summary>
+        private static bool IsWorkflowType(string pageType)
+        {
+            return NormalizePageType(pageType) == "Workflow";
+        }
+
+        /// <summary>
+        /// Checks if a page type represents a Dashboard (formerly CardGrid).
+        /// </summary>
+        private static bool IsDashboardType(string pageType)
+        {
+            return NormalizePageType(pageType) == "Dashboard";
+        }
+
+        /// <summary>
+        /// Checks if a page type represents a Wizard form (formerly GenericForm).
+        /// </summary>
+        private static bool IsWizardType(string pageType)
+        {
+            return NormalizePageType(pageType) == "Wizard";
+        }
+
+        /// <summary>
+        /// Returns true when exactly one step exists and it's a Dashboard type (single-page dashboard).
+        /// </summary>
+        public bool IsCardGridMode
+        {
+            get
+            {
+                // Single Dashboard mode: exactly one step that is a Dashboard type
+                if (_parsedData?.WizardSteps == null || _parsedData.WizardSteps.Count != 1)
+                {
+                    return false;
+                }
+                return IsDashboardType(_parsedData.WizardSteps[0]?.PageType);
+            }
+        }
+
+        /// <summary>
+        /// Returns true when ALL steps are Dashboard type (multi-page dashboard).
+        /// </summary>
+        public bool IsMultiPageCardGridMode
+        {
+            get
+            {
+                if (_parsedData?.WizardSteps == null || _parsedData.WizardSteps.Count == 0)
+                {
+                    return false;
+                }
+                return _parsedData.WizardSteps.All(s => IsDashboardType(s?.PageType));
+            }
+        }
+
+        /// <summary>
+        /// Returns true when navigation buttons should be shown.
+        /// Hidden for both single-page and multi-page Dashboard modes, and Workflow mode.
+        /// In dashboard mode, navigation is done via sidebar icons instead.
+        /// In workflow mode, the workflow controls handle navigation.
+        /// </summary>
+        public bool ShowNavigationButtons => !IsCardGridMode && !IsMultiPageCardGridMode && !IsWorkflowMode;
+
+        /// <summary>
+        /// Returns true when step numbers should be shown in sidebar.
+        /// Hidden for both single and multi-page Dashboard modes.
+        /// </summary>
+        public bool ShowStepNumbers => !IsCardGridMode && !IsMultiPageCardGridMode;
+
+        /// <summary>
+        /// Returns true when in dashboard mode (single or multi-page card grid)
+        /// </summary>
+        public bool IsDashboardMode => IsCardGridMode || IsMultiPageCardGridMode;
 
         public int TotalSteps => Steps?.Count ?? 1;
 
@@ -277,6 +400,11 @@ namespace Launcher.ViewModels
                 _currentPage = value;
                 OnPropertyChanged(nameof(CurrentPage));
 
+                // Notify Workflow-related properties when page changes
+                OnPropertyChanged(nameof(IsWorkflowMode));
+                OnPropertyChanged(nameof(IsSidebarHidden));
+                OnPropertyChanged(nameof(ShowNavigationButtons));
+
                 // Subscribe to new form parameter changes to keep CanExecute in sync
                 if (_currentPage is GenericFormViewModel newForm)
                 {
@@ -380,6 +508,9 @@ namespace Launcher.ViewModels
                 SidebarHeaderIconOrientation = "Left"; // Reset orientation to default
                 // Derive a friendly title from the script name (branding can override later)
                 WindowTitle = System.IO.Path.GetFileNameWithoutExtension(scriptPath) + " Wizard";
+                
+                // Initialize dashboard logging with script path
+                Services.DashboardLogService.Instance.Initialize(scriptPath);
                 LoggingService.Info($"Adding {_wizardSteps.Count} steps from script", component: "MainWindowViewModel");
 
                 int stepNumber = 1;
@@ -407,13 +538,15 @@ namespace Launcher.ViewModels
                         }
                     }
                     
+                    int currentStepNum = stepNumber; // Capture for closure
                     Steps.Add(new StepItem
                     {
                         StepNumber = stepNumber,
                         Title = step.Title,
                         IconGlyph = iconGlyph,
                         ShowConnector = stepNumber < _wizardSteps.Count,
-                        IsCurrent = (stepNumber == 1)
+                        IsCurrent = (stepNumber == 1),
+                        NavigateCommand = new RelayCommand(_ => NavigateToStep(currentStepNum))
                     });
                     stepNumber++;
                 }
@@ -438,11 +571,11 @@ namespace Launcher.ViewModels
             try
             {
                 // Default steps if no script is provided
-                Steps.Add(new StepItem { StepNumber = 1, Title = "Personal Info", ShowConnector = true });
-                Steps.Add(new StepItem { StepNumber = 2, Title = "Delivery Address", ShowConnector = true });
-                Steps.Add(new StepItem { StepNumber = 3, Title = "Billing Address", ShowConnector = true });
-                Steps.Add(new StepItem { StepNumber = 4, Title = "Payment", ShowConnector = true });
-                Steps.Add(new StepItem { StepNumber = 5, Title = "Confirmation", ShowConnector = false });
+                Steps.Add(new StepItem { StepNumber = 1, Title = "Personal Info", ShowConnector = true, NavigateCommand = new RelayCommand(_ => NavigateToStep(1)) });
+                Steps.Add(new StepItem { StepNumber = 2, Title = "Delivery Address", ShowConnector = true, NavigateCommand = new RelayCommand(_ => NavigateToStep(2)) });
+                Steps.Add(new StepItem { StepNumber = 3, Title = "Billing Address", ShowConnector = true, NavigateCommand = new RelayCommand(_ => NavigateToStep(3)) });
+                Steps.Add(new StepItem { StepNumber = 4, Title = "Payment", ShowConnector = true, NavigateCommand = new RelayCommand(_ => NavigateToStep(4)) });
+                Steps.Add(new StepItem { StepNumber = 5, Title = "Confirmation", ShowConnector = false, NavigateCommand = new RelayCommand(_ => NavigateToStep(5)) });
                 
                 // Notify UI of step count changes
                 OnPropertyChanged(nameof(TotalSteps));
@@ -453,6 +586,26 @@ namespace Launcher.ViewModels
             {
                 LoggingService.Error("Error in InitializeSteps", ex, component: "MainWindowViewModel");
             }
+        }
+
+        /// <summary>
+        /// Navigate to a specific step (used by sidebar click navigation in dashboard mode)
+        /// </summary>
+        private void NavigateToStep(int stepNumber)
+        {
+            if (stepNumber < 1 || stepNumber > Steps.Count)
+            {
+                LoggingService.Warn($"Invalid step number: {stepNumber}", component: "MainWindowViewModel");
+                return;
+            }
+            
+            LoggingService.Info($"NavigateToStep called: {stepNumber}", component: "MainWindowViewModel");
+            
+            // Save current page data before navigating
+            SaveCurrentPageData();
+            
+            // Navigate to the target step
+            CurrentStep = stepNumber;
         }
 
         private void UpdateCurrentPage()
@@ -591,6 +744,10 @@ namespace Launcher.ViewModels
                 
                 UpdateNavigationButtonVisibility();
                 UpdateCurrentStepValidation();
+                
+                // Refresh dynamic parameters for cached pages too
+                RefreshDynamicParametersForCurrentStep();
+                
                 LoggingService.Trace("<<< UpdateCurrentPage END (used cache)", component: "MainWindowViewModel");
                 return;
             }
@@ -599,15 +756,53 @@ namespace Launcher.ViewModels
 
             object newPage = null; // Variable to hold the created page
 
-            if (currentStepInfo.PageType == "GenericForm")
+            if (IsWizardType(currentStepInfo.PageType) || currentStepInfo.PageType == "GenericForm")
             {
                 LoggingService.Trace($"  - Creating GenericFormViewModel for step \'{currentStepInfo.Title}\'", component: "MainWindowViewModel");
                 var formViewModel = new GenericFormViewModel(
-                    currentStepInfo.Title ?? $"Step {_currentPageIndex + 1}", 
+                    currentStepInfo.Title ?? $"Step {_currentPageIndex + 1}",
                     currentStepInfo.Description)
                 {
                     Parameters = new ObservableCollection<ParameterViewModel>()
                 };
+
+                // Process Controls collection for banners and cards (from Add-UIBanner, Add-UICard cmdlets)
+                if (currentStepInfo.Controls != null && currentStepInfo.Controls.Count > 0)
+                {
+                    LoggingService.Trace($"    - Processing {currentStepInfo.Controls.Count} controls for banners/cards in GenericForm", component: "MainWindowViewModel");
+                    foreach (var controlObj in currentStepInfo.Controls)
+                    {
+                        try
+                        {
+                            dynamic control = controlObj;
+                            string controlType = control.Type?.ToString() ?? "Unknown";
+
+                            if (controlType.Equals("Banner", StringComparison.OrdinalIgnoreCase))
+                            {
+                                var bannerVm = CreateBannerFromControl(control);
+                                if (bannerVm != null)
+                                {
+                                    formViewModel.Banners.Add(bannerVm);
+                                    LoggingService.Trace($"        - Added banner '{bannerVm.Title}' from Controls collection", component: "MainWindowViewModel");
+                                }
+                            }
+                            else if (controlType.Equals("InfoCard", StringComparison.OrdinalIgnoreCase))
+                            {
+                                var cardVm = CreateCardFromControl(control);
+                                if (cardVm != null)
+                                {
+                                    formViewModel.AdditionalCards.Add(cardVm);
+                                    LoggingService.Trace($"        - Added card '{cardVm.Title}' from Controls collection", component: "MainWindowViewModel");
+                                }
+                            }
+                        }
+                        catch (Exception ex)
+                        {
+                            LoggingService.Error($"Failed to process control for banner/card: {ex.Message}", ex, component: "MainWindowViewModel");
+                        }
+                    }
+                    LoggingService.Trace($"    - Loaded {formViewModel.Banners.Count} banners, {formViewModel.AdditionalCards.Count} cards from Controls", component: "MainWindowViewModel");
+                }
 
                 if (currentStepInfo.Parameters != null)
                 {
@@ -615,19 +810,59 @@ namespace Launcher.ViewModels
                     int paramIndex = 0;
                     foreach (var paramInfo in currentStepInfo.Parameters)
                     {
-                        LoggingService.Trace($"      - Parameter {paramIndex}: Name=\'{paramInfo.Name}\', Type=\'{paramInfo.ParameterType?.Name ?? "null"}\'", component: "MainWindowViewModel");
+                        LoggingService.Trace($"      - Parameter {paramIndex}: Name='{paramInfo.Name}', IsCard={paramInfo.IsCard}, HasBannerJson={!string.IsNullOrEmpty(paramInfo.BannerJson)}", component: "MainWindowViewModel");
                         
-                        // Check if this parameter is a card
-                        if (!string.IsNullOrEmpty(paramInfo.CardTitle) && !string.IsNullOrEmpty(paramInfo.CardContent))
+                        // Check if this parameter is a banner (process BEFORE card to ensure both are handled)
+                        if (!string.IsNullOrEmpty(paramInfo.BannerJson))
                         {
-                            LoggingService.Trace($"        - Creating card: {paramInfo.CardTitle}", component: "MainWindowViewModel");
+                            LoggingService.Trace($"        - Creating banner from JSON ({paramInfo.BannerJson.Length} chars)", component: "MainWindowViewModel");
+                            try
+                            {
+                                var bannerVm = CreateBannerFromJson(paramInfo.BannerJson);
+                                if (bannerVm != null)
+                                {
+                                    formViewModel.Banners.Add(bannerVm);
+                                    LoggingService.Trace($"        - Successfully created banner: {bannerVm.Title}", component: "MainWindowViewModel");
+                                }
+                            }
+                            catch (Exception bannerEx)
+                            {
+                                LoggingService.Error($"Failed to create banner from JSON: {bannerEx.Message}", component: "MainWindowViewModel");
+                            }
+                        }
+                        
+                        // Check if this parameter is a card (WizardCard attribute present)
+                        if (paramInfo.IsCard)
+                        {
+                            LoggingService.Info($"        - Creating card: Title='{paramInfo.CardTitle}', IconPath='{paramInfo.CardIconPath ?? "null"}', ImagePath='{paramInfo.CardImagePath ?? "null"}', BackgroundColor='{paramInfo.CardBackgroundColor ?? "null"}'", component: "MainWindowViewModel");
                             formViewModel.AdditionalCards.Add(new CardViewModel
                             {
                                 Title = paramInfo.CardTitle,
-                                Content = paramInfo.CardContent
+                                Content = paramInfo.CardContent,
+                                ImagePath = paramInfo.CardImagePath,
+                                IconPath = paramInfo.CardIconPath,  // For image files
+                                IconGlyph = paramInfo.CardIcon,     // For Segoe MDL2 glyphs
+                                LinkUrl = paramInfo.CardLinkUrl,
+                                LinkText = paramInfo.CardLinkText,
+                                ImageOpacity = paramInfo.CardImageOpacity ?? 1.0,
+                                BackgroundColor = paramInfo.CardBackgroundColor,  // null allows theme-aware background
+                                TitleColor = paramInfo.CardTitleColor,  // null allows theme-aware text
+                                ContentColor = paramInfo.CardContentColor,  // null allows theme-aware text
+                                CornerRadius = paramInfo.CardCornerRadius ?? 8,
+                                GradientStart = paramInfo.CardGradientStart,
+                                GradientEnd = paramInfo.CardGradientEnd,
+                                OpenLinkCommand = new RelayCommand(param => OpenUrl(param?.ToString()))
                             });
                             paramIndex++;
                             continue; // Skip adding as a parameter control
+                        }
+                        
+                        // If parameter has banner but no card, skip as placeholder
+                        if (!string.IsNullOrEmpty(paramInfo.BannerJson) && !paramInfo.IsCard)
+                        {
+                            // Banner already processed above, just skip this parameter
+                            paramIndex++;
+                            continue;
                         }
                         
                         // Skip placeholder parameters (they don't render as controls)
@@ -682,69 +917,107 @@ namespace Launcher.ViewModels
                 }
                 newPage = formViewModel; // Assign the created form
             }
-            else if (currentStepInfo.PageType == "Card")
+            else if (currentStepInfo.PageType == "Dashboard")
             {
-                LoggingService.Trace("  - Creating CardViewModel", component: "MainWindowViewModel");
+                LoggingService.Info($"*** Creating Dashboard page for step: {currentStepInfo.Title}, PageType={currentStepInfo.PageType}", component: "MainWindowViewModel");
                 
-                // Create a form view model to hold parameters and display form controls
-                var formViewModel = new GenericFormViewModel(currentStepInfo.Title ?? "Information", currentStepInfo.Description ?? "");
+                var cardGridVm = new CardGridViewModel();
+                cardGridVm.Title = currentStepInfo.Title ?? "Dashboard";
+                cardGridVm.Description = currentStepInfo.Description ?? "";
                 
-                // Create and add the main card
-                var mainCard = new CardViewModel
+                // Load cards from Controls collection (Add-WizardBanner, Add-WizardVisualizationCard, etc.)
+                LoggingService.Info($"*** Step Controls: {(currentStepInfo.Controls?.Count ?? 0)} controls", component: "MainWindowViewModel");
+                if (currentStepInfo.Controls != null && currentStepInfo.Controls.Count > 0)
                 {
-                    Title = currentStepInfo.Title ?? "Information",
-                    Content = currentStepInfo.Description ?? "This is a card for displaying informational text."
-                };
-                formViewModel.Parameters = new ObservableCollection<ParameterViewModel>();
-                
-                // Process parameters for this step
+                    LoggingService.Info($"Loading {currentStepInfo.Controls.Count} cards from Controls", component: "MainWindowViewModel");
+                    cardGridVm.LoadCardsFromControls(currentStepInfo.Controls);
+                }
+                else
+                {
+                    LoggingService.Warn("*** No controls found for Dashboard step", component: "MainWindowViewModel");
+                }
+
+                // Find UIScriptCards data from parameters
                 if (currentStepInfo.Parameters != null)
                 {
-                    LoggingService.Trace($"Processing {currentStepInfo.Parameters.Count} parameters for Card step", component: "MainWindowViewModel");
-                    
-                    // First process additional card controls
                     foreach (var paramInfo in currentStepInfo.Parameters)
                     {
-                        // If this parameter has card properties, create a CardViewModel for it
-                        if (!string.IsNullOrEmpty(paramInfo.CardTitle) && !string.IsNullOrEmpty(paramInfo.CardContent))
+                        // Look for script cards JSON in parameter properties
+                        if (!string.IsNullOrEmpty(paramInfo.ScriptCardsJson))
                         {
-                            LoggingService.Trace($"Creating additional card: {paramInfo.CardTitle}", component: "MainWindowViewModel");
-                            formViewModel.AdditionalCards.Add(new CardViewModel
-                            {
-                                Title = paramInfo.CardTitle,
-                                Content = paramInfo.CardContent
-                            });
-                        }
-                        // Otherwise, if it's a regular parameter (not a placeholder), add it to the form
-                        else if (paramInfo.ParameterType != null && 
-                                 !paramInfo.IsPlaceholder && 
-                                 !string.IsNullOrEmpty(paramInfo.Label))
-                        {
-                            LoggingService.Trace($"Adding parameter control to Card step: {paramInfo.Name}", component: "MainWindowViewModel");
-                            
-                            object existingValue = null;
-                            if (FormData.TryGetValue(paramInfo.Name, out object savedValue))
-                            {
-                                existingValue = savedValue;
-                            }
-                            
-                            var paramVm = new ParameterViewModel(paramInfo, this, existingValue, _dialogService);
-                            formViewModel.Parameters.Add(paramVm);
-                            
-                            // Track for dynamic parameter updates (Phase 2)
-                            if (_parameterViewModels != null && !string.IsNullOrEmpty(paramInfo.Name))
-                            {
-                                _parameterViewModels[paramInfo.Name] = paramVm;
-                            }
+                            LoggingService.Info($"Loading script cards from JSON ({paramInfo.ScriptCardsJson.Length} chars)", component: "MainWindowViewModel");
+                            cardGridVm.LoadCardsFromJson(paramInfo.ScriptCardsJson);
+                            break;
                         }
                     }
                 }
                 
-                // Set the completed form view model as the current page
-                newPage = formViewModel;
+                newPage = cardGridVm;
+            }
+            else if (IsDashboardType(currentStepInfo.PageType) || currentStepInfo.PageType == "CardGrid")
+            {
+                LoggingService.Trace("  - Creating Dashboard for step", component: "MainWindowViewModel");
                 
-                // Also add the main card as the first card
-                formViewModel.AdditionalCards.Insert(0, mainCard);
+                var cardGridVm = new CardGridViewModel
+                {
+                    Title = currentStepInfo.Title ?? "Dashboard",
+                    Description = currentStepInfo.Description ?? ""
+                };
+                
+                // Load cards from Controls collection (Add-WizardBanner, Add-WizardVisualizationCard, etc.)
+                if (currentStepInfo.Controls != null && currentStepInfo.Controls.Count > 0)
+                {
+                    LoggingService.Info($"Loading {currentStepInfo.Controls.Count} cards from Controls", component: "MainWindowViewModel");
+                    cardGridVm.LoadCardsFromControls(currentStepInfo.Controls);
+                }
+
+                // Find UIScriptCards data from parameters
+                LoggingService.Info($"*** Searching for ScriptCardsJson in {currentStepInfo.Parameters?.Count ?? 0} parameters", component: "MainWindowViewModel");
+                if (currentStepInfo.Parameters != null)
+                {
+                    foreach (var paramInfo in currentStepInfo.Parameters)
+                    {
+                        LoggingService.Info($"*** Checking param '{paramInfo.Name}': ScriptCardsJson={(paramInfo.ScriptCardsJson != null ? paramInfo.ScriptCardsJson.Length + " chars" : "null")}", component: "MainWindowViewModel");
+                        // Look for script cards JSON in parameter properties
+                        if (!string.IsNullOrEmpty(paramInfo.ScriptCardsJson))
+                        {
+                            LoggingService.Info($"*** FOUND! Loading script cards from JSON ({paramInfo.ScriptCardsJson.Length} chars)", component: "MainWindowViewModel");
+                            cardGridVm.LoadCardsFromJson(paramInfo.ScriptCardsJson);
+                            break;
+                        }
+                    }
+                }
+
+                newPage = cardGridVm;
+            }
+            else if (IsWorkflowType(currentStepInfo.PageType))
+            {
+                LoggingService.Trace("  - Creating Workflow for step", component: "MainWindowViewModel");
+                
+                var workflowVm = new WorkflowViewModel(
+                    currentStepInfo.Title ?? "Workflow",
+                    currentStepInfo.Description ?? ""
+                );
+                
+                // Load workflow tasks from parameters
+                if (currentStepInfo.Parameters != null)
+                {
+                    foreach (var paramInfo in currentStepInfo.Parameters)
+                    {
+                        // Look for workflow tasks JSON in parameter properties
+                        if (!string.IsNullOrEmpty(paramInfo.WorkflowTasksJson))
+                        {
+                            LoggingService.Info($"Loading workflow tasks from JSON ({paramInfo.WorkflowTasksJson.Length} chars)", component: "MainWindowViewModel");
+                            LoadWorkflowTasksFromJson(workflowVm, paramInfo.WorkflowTasksJson);
+                            break;
+                        }
+                    }
+                }
+                
+                // Setup workflow commands
+                SetupWorkflowCommands(workflowVm, currentStepInfo);
+                
+                newPage = workflowVm;
             }
             else
             {
@@ -772,7 +1045,37 @@ namespace Launcher.ViewModels
             // Update validation status for the current page
             UpdateCurrentStepValidation();
             
+            // Refresh dynamic parameters for the current step
+            RefreshDynamicParametersForCurrentStep();
+            
             LoggingService.Trace("<<< UpdateCurrentPage END", component: "MainWindowViewModel"); 
+        }
+        
+        /// <summary>
+        /// Refresh dynamic parameters for the current step when navigating to it
+        /// </summary>
+        private async void RefreshDynamicParametersForCurrentStep()
+        {
+            if (_dynamicParametersMap == null || _dynamicParametersMap.Count == 0)
+                return;
+                
+            if (_parsedData?.WizardSteps == null || _currentPageIndex < 0 || _currentPageIndex >= _parsedData.WizardSteps.Count)
+                return;
+                
+            var currentStep = _parsedData.WizardSteps[_currentPageIndex];
+            if (currentStep.Parameters == null)
+                return;
+                
+            LoggingService.Info($"Refreshing dynamic parameters for step '{currentStep.Title}'", component: "MainWindowViewModel");
+            
+            // Find all dynamic parameters in the current step and refresh them
+            foreach (var param in currentStep.Parameters)
+            {
+                if (param.IsDynamic && _dynamicParametersMap.ContainsKey(param.Name))
+                {
+                    await RefreshParameterChoicesAsync(param.Name);
+                }
+            }
         }
 
         private bool CanExecuteNext(object parameter)
@@ -884,17 +1187,24 @@ namespace Launcher.ViewModels
                     {
                         LoggingService.Warn("Pre-execution validation failed; blocking execution.", component: "MainWindowViewModel");
                         
-                        // Show detailed validation popup
-                        System.Windows.MessageBox.Show(
+                        // Show detailed validation popup using themed dialog
+                        Views.MessageDialog.Show(
                             $"Please complete the following required fields before continuing:\n\n{summary}",
                             "Required Fields Missing",
-                            System.Windows.MessageBoxButton.OK,
-                            System.Windows.MessageBoxImage.Warning);
+                            Views.MessageDialog.MessageType.Warning);
                         
                         return;
                     }
                     
-                    // All validation passed - execute script
+                    // All validation passed - mark ALL steps as completed
+                    foreach (var step in Steps)
+                    {
+                        step.IsCompleted = true;
+                        step.IsValid = true;
+                    }
+                    LoggingService.Info("All steps marked as completed after successful validation", component: "MainWindowViewModel");
+                    
+                    // Execute script
                     RunScript();
                 }
             }
@@ -953,7 +1263,46 @@ namespace Launcher.ViewModels
             
             // Build maps
             _dynamicParametersMap = new Dictionary<string, ParameterInfo>(StringComparer.OrdinalIgnoreCase);
-            _parameterViewModels = new Dictionary<string, ParameterViewModel>(StringComparer.OrdinalIgnoreCase);
+            
+            // Initialize _parameterViewModels if it doesn't exist, but don't overwrite existing entries
+            // ParameterViewModels are created in SetStepsFromScript and we need to preserve those references
+            if (_parameterViewModels == null)
+            {
+                _parameterViewModels = new Dictionary<string, ParameterViewModel>(StringComparer.OrdinalIgnoreCase);
+            }
+            
+            // Populate _parameterViewModels by finding existing ParameterViewModels from all pages
+            // This ensures we have references to all ParameterViewModels for dynamic parameter updates
+            if (_pageCache != null)
+            {
+                foreach (var page in _pageCache.Values)
+                {
+                    if (page is GenericFormViewModel formVm && formVm.Parameters != null)
+                    {
+                        foreach (var paramVm in formVm.Parameters)
+                        {
+                            if (!string.IsNullOrEmpty(paramVm.Name) && !_parameterViewModels.ContainsKey(paramVm.Name))
+                            {
+                                _parameterViewModels[paramVm.Name] = paramVm;
+                                LoggingService.Trace($"  Found ParameterViewModel for '{paramVm.Name}'", component: "MainWindowViewModel");
+                            }
+                        }
+                    }
+                }
+            }
+            
+            // Also check current page if it exists
+            if (CurrentPage is GenericFormViewModel currentFormVm && currentFormVm.Parameters != null)
+            {
+                foreach (var paramVm in currentFormVm.Parameters)
+                {
+                    if (!string.IsNullOrEmpty(paramVm.Name) && !_parameterViewModels.ContainsKey(paramVm.Name))
+                    {
+                        _parameterViewModels[paramVm.Name] = paramVm;
+                        LoggingService.Trace($"  Found ParameterViewModel for '{paramVm.Name}' from current page", component: "MainWindowViewModel");
+                    }
+                }
+            }
             
             // Find all dynamic parameters and register them
             if (_wizardSteps == null) return;
@@ -967,10 +1316,12 @@ namespace Launcher.ViewModels
                         _dynamicParametersMap[param.Name] = param;
                         
                         // Register with DynamicParameterManager
-                        var attr = new WizardDataSourceAttribute();
+                        var attr = new UIDataSourceAttribute();
                         
                         if (!string.IsNullOrEmpty(param.DataSourceScriptBlock))
                         {
+                            // Pass script directly - do NOT wrap in braces
+                            // Wrapping in braces creates a nested script block literal that returns itself
                             attr.ScriptBlock = ScriptBlock.Create(param.DataSourceScriptBlock);
                         }
                         else if (!string.IsNullOrEmpty(param.DataSourceCsvPath))
@@ -994,7 +1345,7 @@ namespace Launcher.ViewModels
                 }
             }
             
-            LoggingService.Info($"Dynamic parameters initialized: {_dynamicParametersMap.Count} dynamic parameters registered", component: "MainWindowViewModel");
+            LoggingService.Info($"Dynamic parameters initialized: {_dynamicParametersMap.Count} dynamic parameters registered, {_parameterViewModels.Count} ParameterViewModels tracked", component: "MainWindowViewModel");
         }
         
         /// <summary>
@@ -1284,8 +1635,74 @@ namespace Launcher.ViewModels
                 WriteHeaderLine("SESSION START");
 
                 // 2) Read and preprocess script
-                string originalScriptContent = File.ReadAllText(ScriptPath);
-                string processedScriptContent = PreProcessScriptForExecution(originalScriptContent);
+                string originalScriptContent;
+                string processedScriptContent;
+                
+                // Check if we have ScriptBody from JSON mode (Module API)
+                if (!string.IsNullOrEmpty(_parsedData?.ScriptBody))
+                {
+                    LoggingService.Info("Using ScriptBody from JSON definition (Module API mode)", component: "MainWindowViewModel");
+                    originalScriptContent = _parsedData.ScriptBody;
+                    
+                    // For Module API scripts, we need to wrap the script body with variable assignments
+                    // since there's no param block - the variables come from FormData
+                    var scriptBuilder = new StringBuilder();
+                    
+                    // Add form data as variables
+                    if (FormData != null && FormData.Any())
+                    {
+                        foreach (var kvp in FormData)
+                        {
+                            // Skip null values
+                            if (kvp.Value == null) continue;
+                            
+                            // Format value based on type
+                            if (kvp.Value is bool boolVal)
+                            {
+                                scriptBuilder.AppendLine($"${kvp.Key} = ${boolVal.ToString().ToLower()}");
+                            }
+                            else if (kvp.Value is SecureString)
+                            {
+                                // SecureString will be passed as parameter, not as variable
+                                continue;
+                            }
+                            else if (kvp.Value is string strVal)
+                            {
+                                // Escape single quotes
+                                strVal = strVal.Replace("'", "''");
+                                scriptBuilder.AppendLine($"${kvp.Key} = '{strVal}'");
+                            }
+                            else if (kvp.Value is Array arr)
+                            {
+                                var items = arr.Cast<object>().Select(o => $"'{o?.ToString()?.Replace("'", "''") ?? ""}'");
+                                scriptBuilder.AppendLine($"${kvp.Key} = @({string.Join(", ", items)})");
+                            }
+                            else
+                            {
+                                scriptBuilder.AppendLine($"${kvp.Key} = '{kvp.Value}'");
+                            }
+                        }
+                    }
+                    
+                    // Add the actual script body
+                    scriptBuilder.AppendLine();
+                    scriptBuilder.AppendLine(originalScriptContent);
+                    
+                    processedScriptContent = scriptBuilder.ToString();
+                    LoggingService.Debug($"Module API script prepared with {FormData?.Count ?? 0} variables", component: "MainWindowViewModel");
+                }
+                else if (!string.IsNullOrEmpty(ScriptPath) && File.Exists(ScriptPath))
+                {
+                    originalScriptContent = File.ReadAllText(ScriptPath);
+                    processedScriptContent = PreProcessScriptForExecution(originalScriptContent);
+                }
+                else
+                {
+                    AppendLine("ERR", "No script content or script path available.");
+                    CurrentPage = new ErrorViewModel("Failed to prepare script for execution.");
+                    return;
+                }
+                
                 if (processedScriptContent == null)
                 {
                     AppendLine("ERR", "Failed to pre-process script content.");
@@ -1952,9 +2369,24 @@ namespace Launcher.ViewModels
                 }
                 
                 // Now use the argument (which is the same as the field we just set)
-                LoggingService.Info($"Loading wizard steps from script: {scriptPath}", component: "MainWindowViewModel"); 
-                var loadedSteps = _reflectionService.LoadWizardStepsFromScript(scriptPath, out var branding); 
-                _parsedData = new ScriptData { WizardSteps = loadedSteps, Branding = branding };
+                LoggingService.Info($"Loading wizard steps from: {scriptPath}", component: "MainWindowViewModel");
+                
+                WizardBranding branding;
+                List<WizardStep> loadedSteps;
+                
+                // Check if it's a JSON definition file or PowerShell script
+                if (scriptPath.EndsWith(".json", StringComparison.OrdinalIgnoreCase))
+                {
+                    LoggingService.Info("Detected JSON definition file, using JsonDefinitionLoader", component: "MainWindowViewModel");
+                    _parsedData = JsonDefinitionLoader.LoadFromJson(scriptPath, out branding);
+                    loadedSteps = _parsedData.WizardSteps;
+                }
+                else
+                {
+                    LoggingService.Info("Detected PowerShell script, using ReflectionService", component: "MainWindowViewModel");
+                    loadedSteps = _reflectionService.LoadWizardStepsFromScript(scriptPath, out branding);
+                    _parsedData = new ScriptData { WizardSteps = loadedSteps, Branding = branding };
+                }
                 _wizardSteps = _parsedData?.WizardSteps ?? new List<WizardStep>(); 
                 
                 LoggingService.Info($"Loaded {_wizardSteps.Count} steps from {scriptPath}.", component: "MainWindowViewModel");
@@ -2036,30 +2468,122 @@ namespace Launcher.ViewModels
                 // --- NEW: Directly initialize CurrentPage for the first step --- 
                 if (_wizardSteps != null && _wizardSteps.Count > 0)
                 {
-                    _currentPageIndex = 0; // Set index before creating page
-                    var firstStepInfo = _wizardSteps[0];
+                    // Check if we should skip to workflow step (resume scenario)
+                    int startIndex = 0;
+                    if (branding != null && branding.SkipToWorkflow)
+                    {
+                        // Find the workflow step
+                        for (int i = 0; i < _wizardSteps.Count; i++)
+                        {
+                            if (IsWorkflowType(_wizardSteps[i].PageType))
+                            {
+                                startIndex = i;
+                                LoggingService.Info($"SkipToWorkflow: Skipping to workflow step at index {i}", component: "MainWindowViewModel");
+                                break;
+                            }
+                        }
+                    }
+                    
+                    _currentPageIndex = startIndex; // Set index before creating page
+                    var firstStepInfo = _wizardSteps[startIndex];
                     LoggingService.Trace($"Directly creating initial page (Index 0): Title='{firstStepInfo.Title}', Type='{firstStepInfo.PageType}'", component: "MainWindowViewModel");
-                    if (firstStepInfo.PageType == "GenericForm")
+                    if (IsWizardType(firstStepInfo.PageType) || firstStepInfo.PageType == "GenericForm")
                     {
                         // Initial page creation - handle cards properly
                         var formViewModel = new GenericFormViewModel(firstStepInfo.Title ?? "Step 1", firstStepInfo.Description)
                         {
                             Parameters = new ObservableCollection<ParameterViewModel>()
                         };
+                        
+                        // Process Controls collection for banners and cards (from Add-UIBanner, Add-UICard cmdlets)
+                        if (firstStepInfo.Controls != null && firstStepInfo.Controls.Count > 0)
+                        {
+                            LoggingService.Trace($"Processing {firstStepInfo.Controls.Count} controls for banners/cards in initial Wizard page", component: "MainWindowViewModel");
+                            foreach (var controlObj in firstStepInfo.Controls)
+                            {
+                                try
+                                {
+                                    dynamic control = controlObj;
+                                    string controlType = control.Type?.ToString() ?? "Unknown";
+
+                                    if (controlType.Equals("Banner", StringComparison.OrdinalIgnoreCase))
+                                    {
+                                        var bannerVm = CreateBannerFromControl(control);
+                                        if (bannerVm != null)
+                                        {
+                                            formViewModel.Banners.Add(bannerVm);
+                                            LoggingService.Trace($"Added banner '{bannerVm.Title}' to initial Wizard page", component: "MainWindowViewModel");
+                                        }
+                                    }
+                                    else if (controlType.Equals("InfoCard", StringComparison.OrdinalIgnoreCase))
+                                    {
+                                        var cardVm = CreateCardFromControl(control);
+                                        if (cardVm != null)
+                                        {
+                                            formViewModel.AdditionalCards.Add(cardVm);
+                                            LoggingService.Trace($"Added card '{cardVm.Title}' to initial Wizard page", component: "MainWindowViewModel");
+                                        }
+                                    }
+                                }
+                                catch (Exception ex)
+                                {
+                                    LoggingService.Error($"Failed to process control for initial Wizard page: {ex.Message}", ex, component: "MainWindowViewModel");
+                                }
+                            }
+                        }
+                        
                         if (firstStepInfo.Parameters != null)
                         { 
                             foreach (var paramInfo in firstStepInfo.Parameters) 
                             { 
+                                // Check if this parameter is a banner (process BEFORE card to handle both)
+                                if (!string.IsNullOrEmpty(paramInfo.BannerJson))
+                                {
+                                    LoggingService.Trace($"  - Creating banner from JSON for initial page ({paramInfo.BannerJson.Length} chars)", component: "MainWindowViewModel");
+                                    try
+                                    {
+                                        var bannerVm = CreateBannerFromJson(paramInfo.BannerJson);
+                                        if (bannerVm != null)
+                                        {
+                                            formViewModel.Banners.Add(bannerVm);
+                                        }
+                                    }
+                                    catch (Exception bannerEx)
+                                    {
+                                        LoggingService.Error($"Failed to create banner from JSON: {bannerEx.Message}", component: "MainWindowViewModel");
+                                    }
+                                }
+                                
                                 // Check if this parameter is a card
-                                if (!string.IsNullOrEmpty(paramInfo.CardTitle) && !string.IsNullOrEmpty(paramInfo.CardContent))
+                                if (paramInfo.IsCard)
                                 {
                                     LoggingService.Trace($"  - Creating card for initial page: {paramInfo.CardTitle}", component: "MainWindowViewModel");
                                     formViewModel.AdditionalCards.Add(new CardViewModel
                                     {
                                         Title = paramInfo.CardTitle,
-                                        Content = paramInfo.CardContent
+                                        Content = paramInfo.CardContent,
+                                        IconPath = paramInfo.CardIconPath,  // For image files
+                                        IconGlyph = paramInfo.CardIcon,     // For Segoe MDL2 glyphs
+                                        ImagePath = paramInfo.CardImagePath,
+                                        LinkUrl = paramInfo.CardLinkUrl,
+                                        LinkText = paramInfo.CardLinkText,
+                                        ImageOpacity = paramInfo.CardImageOpacity ?? 1.0,
+                                        BackgroundColor = paramInfo.CardBackgroundColor,
+                                        TitleColor = paramInfo.CardTitleColor,
+                                        ContentColor = paramInfo.CardContentColor,
+                                        CornerRadius = paramInfo.CardCornerRadius ?? 8,
+                                        GradientStart = paramInfo.CardGradientStart,
+                                        GradientEnd = paramInfo.CardGradientEnd,
+                                        OpenLinkCommand = new RelayCommand(param => OpenUrl(param?.ToString()))
                                     });
                                     continue; // Skip adding as a parameter control
+                                }
+                                
+                                // If parameter has only banner (no card), skip as placeholder
+                                if (!string.IsNullOrEmpty(paramInfo.BannerJson) && !paramInfo.IsCard)
+                                {
+                                    // Banner already processed above, just skip
+                                    continue;
                                 }
                                 
                                 // Skip placeholder parameters (they don't render as controls)
@@ -2082,6 +2606,40 @@ namespace Launcher.ViewModels
                             } 
                         }
                         CurrentPage = formViewModel;
+                    }
+                    else if (IsDashboardType(firstStepInfo.PageType) || firstStepInfo.PageType == "CardGrid")
+                    {
+                        LoggingService.Trace("  - Creating initial Dashboard page", component: "MainWindowViewModel");
+                        
+                        var cardGridVm = new CardGridViewModel
+                        {
+                            Title = firstStepInfo.Title ?? "Dashboard",
+                            Description = firstStepInfo.Description ?? ""
+                        };
+
+                        // Load cards from Controls collection (Add-UIBanner, Add-UIVisualizationCard, etc.)
+                        if (firstStepInfo.Controls != null && firstStepInfo.Controls.Count > 0)
+                        {
+                            LoggingService.Info($"Loading {firstStepInfo.Controls.Count} cards from Controls for initial Dashboard", component: "MainWindowViewModel");
+                            cardGridVm.LoadCardsFromControls(firstStepInfo.Controls);
+                        }
+
+                        // Find UIScriptCards data from parameters
+                        if (firstStepInfo.Parameters != null)
+                        {
+                            foreach (var paramInfo in firstStepInfo.Parameters)
+                            {
+                                // Look for script cards JSON in parameter properties
+                                if (!string.IsNullOrEmpty(paramInfo.ScriptCardsJson))
+                                {
+                                    LoggingService.Info($"Loading script cards from JSON ({paramInfo.ScriptCardsJson.Length} chars)", component: "MainWindowViewModel");
+                                    cardGridVm.LoadCardsFromJson(paramInfo.ScriptCardsJson);
+                                    break;
+                                }
+                            }
+                        }
+                        
+                        CurrentPage = cardGridVm;
                     }
                     else if (firstStepInfo.PageType == "Card")
                     {
@@ -2108,13 +2666,25 @@ namespace Launcher.ViewModels
                             foreach (var paramInfo in firstStepInfo.Parameters)
                             {
                                 // If this parameter has card properties, create a CardViewModel for it
-                                if (!string.IsNullOrEmpty(paramInfo.CardTitle) && !string.IsNullOrEmpty(paramInfo.CardContent))
+                                if (paramInfo.IsCard)
                                 {
                                     LoggingService.Trace($"Creating additional card: {paramInfo.CardTitle}", component: "MainWindowViewModel");
                                     formViewModel.AdditionalCards.Add(new CardViewModel
                                     {
                                         Title = paramInfo.CardTitle,
-                                        Content = paramInfo.CardContent
+                                        Content = paramInfo.CardContent,
+                                        IconPath = paramInfo.CardIconPath,
+                                        ImagePath = paramInfo.CardImagePath,
+                                        LinkUrl = paramInfo.CardLinkUrl,
+                                        LinkText = paramInfo.CardLinkText,
+                                        ImageOpacity = paramInfo.CardImageOpacity ?? 1.0,
+                                        BackgroundColor = paramInfo.CardBackgroundColor,
+                                        TitleColor = paramInfo.CardTitleColor,
+                                        ContentColor = paramInfo.CardContentColor,
+                                        CornerRadius = paramInfo.CardCornerRadius ?? 8,
+                                        GradientStart = paramInfo.CardGradientStart,
+                                        GradientEnd = paramInfo.CardGradientEnd,
+                                        OpenLinkCommand = new RelayCommand(param => OpenUrl(param?.ToString()))
                                     });
                                 }
                                 // Otherwise, if it's a regular parameter (not a placeholder), add it to the form
@@ -2139,6 +2709,32 @@ namespace Launcher.ViewModels
                         formViewModel.AdditionalCards.Insert(0, mainCard);
                         CurrentPage = formViewModel;
                     }
+                    else if (IsWorkflowType(firstStepInfo.PageType))
+                    {
+                        LoggingService.Trace("  - Creating initial Workflow page", component: "MainWindowViewModel");
+                        
+                        var workflowVm = new WorkflowViewModel(
+                            firstStepInfo.Title ?? "Workflow",
+                            firstStepInfo.Description ?? ""
+                        );
+                        
+                        // Load workflow tasks from parameters
+                        if (firstStepInfo.Parameters != null)
+                        {
+                            foreach (var paramInfo in firstStepInfo.Parameters)
+                            {
+                                if (!string.IsNullOrEmpty(paramInfo.WorkflowTasksJson))
+                                {
+                                    LoggingService.Info($"Loading workflow tasks from JSON ({paramInfo.WorkflowTasksJson.Length} chars)", component: "MainWindowViewModel");
+                                    LoadWorkflowTasksFromJson(workflowVm, paramInfo.WorkflowTasksJson);
+                                    break;
+                                }
+                            }
+                        }
+                        
+                        SetupWorkflowCommands(workflowVm, firstStepInfo);
+                        CurrentPage = workflowVm;
+                    }
                     else 
                     {
                         LoggingService.Error($"Unsupported first page type: {firstStepInfo.PageType}", component: "MainWindowViewModel");
@@ -2146,6 +2742,9 @@ namespace Launcher.ViewModels
                         return;
                     }
                     LoggingService.Info($"Initial CurrentPage set directly to type {CurrentPage?.GetType().Name}", component: "MainWindowViewModel");
+
+                    // Refresh dynamic parameters for the initial page
+                    RefreshDynamicParametersForCurrentStep();
 
                     // --- Defer ONLY the step indicator update --- 
                     System.Windows.Application.Current.Dispatcher.BeginInvoke(
@@ -2221,12 +2820,11 @@ namespace Launcher.ViewModels
             {
                 LoggingService.Warn("Pre-execution validation failed in Finish; blocking execution.", component: "MainWindowViewModel");
                 
-                // Show detailed validation popup
-                System.Windows.MessageBox.Show(
+                // Show detailed validation popup using themed dialog
+                Views.MessageDialog.Show(
                     $"Please complete the following required fields before continuing:\n\n{summary}",
                     "Required Fields Missing",
-                    System.Windows.MessageBoxButton.OK,
-                    System.Windows.MessageBoxImage.Warning);
+                    Views.MessageDialog.MessageType.Warning);
                 
                 return;
             }
@@ -2571,7 +3169,7 @@ namespace Launcher.ViewModels
                 LoggingService.LogValidation($"Overall validation FAILED with {errors.Count} errors", "MainWindowViewModel");
                 if (showMessage)
                 {
-                    MessageBox.Show(message, "Validation Error", MessageBoxButton.OK, MessageBoxImage.Warning);
+                    Views.MessageDialog.ShowWarning(message, "Validation Error");
                 }
                 return false;
             }
@@ -2707,8 +3305,54 @@ namespace Launcher.ViewModels
                         }
                     }
 
-                    // Regex check
-                    if (!isBoolType && !string.IsNullOrEmpty(p.ValidationPattern))
+                    // ValidationScript check (takes priority over ValidationPattern)
+                    if (!isBoolType && !string.IsNullOrEmpty(p.ValidationScript))
+                    {
+                        try
+                        {
+                            string inputValue = null;
+                            if (isSecure)
+                            {
+                                var ss = valueObj as SecureString;
+                                if (ss != null && ss.Length > 0)
+                                {
+                                    IntPtr bstr = Marshal.SecureStringToBSTR(ss);
+                                    try
+                                    {
+                                        inputValue = Marshal.PtrToStringBSTR(bstr);
+                                    }
+                                    finally
+                                    {
+                                        if (bstr != IntPtr.Zero) Marshal.ZeroFreeBSTR(bstr);
+                                    }
+                                }
+                            }
+                            else
+                            {
+                                inputValue = valueObj?.ToString();
+                            }
+
+                            if (!string.IsNullOrEmpty(inputValue))
+                            {
+                                if (!ExecuteValidationScript(p.ValidationScript, inputValue, out string scriptError))
+                                {
+                                    var errorMsg = string.IsNullOrEmpty(scriptError) 
+                                        ? $"Step {stepNum} '{step.Title}': '{p.Label ?? p.Name}' does not meet the validation requirements."
+                                        : $"Step {stepNum} '{step.Title}': '{p.Label ?? p.Name}' - {scriptError}";
+                                    errors.Add(errorMsg);
+                                    LoggingService.LogValidation($"ValidationScript FAILED - {errorMsg}", "MainWindowViewModel");
+                                }
+                            }
+                        }
+                        catch (Exception ex)
+                        {
+                            var error = $"Step {stepNum} '{step.Title}': Validation script error for '{p.Label ?? p.Name}': {ex.Message}";
+                            errors.Add(error);
+                            LoggingService.Error($"ValidationScript execution error for parameter {p.Name}: {ex.Message}", ex, "MainWindowViewModel");
+                        }
+                    }
+                    // Regex check (only if no ValidationScript)
+                    else if (!isBoolType && !string.IsNullOrEmpty(p.ValidationPattern))
                     {
                         try
                         {
@@ -2751,6 +3395,53 @@ namespace Launcher.ViewModels
             }
 
             return true;
+        }
+
+        // Helper to validate using custom PowerShell ValidationScript
+        private bool ExecuteValidationScript(string validationScript, string inputValue, out string errorMessage)
+        {
+            errorMessage = null;
+            
+            if (string.IsNullOrEmpty(validationScript) || string.IsNullOrEmpty(inputValue))
+                return true;
+
+            try
+            {
+                using (var ps = System.Management.Automation.PowerShell.Create())
+                {
+                    // The validation script already contains param($InputObject) - use it directly
+                    ps.AddScript(validationScript);
+                    ps.AddParameter("InputObject", inputValue);
+                    
+                    var results = ps.Invoke();
+                    
+                    if (ps.HadErrors)
+                    {
+                        errorMessage = $"Validation script error: {ps.Streams.Error.First()?.Exception?.Message ?? "Unknown error"}";
+                        return false;
+                    }
+                    
+                    // Check if the script returned $true or $false
+                    if (results.Count > 0)
+                    {
+                        var result = results[0];
+                        var baseObject = result.BaseObject;
+                        if (baseObject is bool boolResult)
+                        {
+                            return boolResult;
+                        }
+                    }
+                    
+                    // If no explicit boolean return, check if any non-empty result was returned
+                    return results.Count > 0;
+                }
+            }
+            catch (Exception ex)
+            {
+                errorMessage = $"Failed to execute validation script: {ex.Message}";
+                LoggingService.Error($"ValidationScript execution failed: {ex.Message}", component: "MainWindowViewModel");
+                return false;
+            }
         }
 
         // Helper to validate SecureString content against a regex pattern safely
@@ -2879,14 +3570,10 @@ namespace Launcher.ViewModels
         {
             message = null;
             
-            // Show confirmation dialog when user tries to close
-            var result = System.Windows.MessageBox.Show(
+            // Show themed confirmation dialog when user tries to close
+            return Views.MessageDialog.ShowConfirmation(
                 "Are you sure you want to close the application?",
-                "Confirm Close",
-                System.Windows.MessageBoxButton.YesNo,
-                System.Windows.MessageBoxImage.Question);
-            
-            return result == System.Windows.MessageBoxResult.Yes;
+                "Confirm Close");
         }
 
         /// <summary>
@@ -2986,5 +3673,542 @@ namespace Launcher.ViewModels
                     Marshal.ZeroFreeBSTR(bstr);
             }
         }
+
+        /// <summary>
+        /// Creates a BannerViewModel from a Controls collection item (UIControl from Add-UIBanner cmdlet).
+        /// </summary>
+        private BannerViewModel CreateBannerFromControl(dynamic control)
+        {
+            try
+            {
+                // Helper to safely get property value from Properties dictionary
+                Func<string, string> GetProp = (key) =>
+                {
+                    try
+                    {
+                        if (control.Properties != null && control.Properties.ContainsKey(key))
+                        {
+                            return control.Properties[key]?.ToString() ?? "";
+                        }
+                    }
+                    catch { }
+                    return "";
+                };
+
+                Func<string, int, int> GetIntProp = (key, defaultVal) =>
+                {
+                    int result;
+                    return int.TryParse(GetProp(key), out result) ? result : defaultVal;
+                };
+
+                Func<string, double, double> GetDoubleProp = (key, defaultVal) =>
+                {
+                    double result;
+                    return double.TryParse(GetProp(key), out result) ? result : defaultVal;
+                };
+
+                Func<string, bool, bool> GetBoolProp = (key, defaultVal) =>
+                {
+                    var val = GetProp(key);
+                    if (string.IsNullOrEmpty(val)) return defaultVal;
+                    bool result;
+                    return bool.TryParse(val, out result) ? result : defaultVal;
+                };
+
+                // Get title from various possible property names
+                string title = GetProp("BannerTitle");
+                if (string.IsNullOrEmpty(title)) title = GetProp("Title");
+                if (string.IsNullOrEmpty(title)) title = control.Label?.ToString() ?? "";
+                if (string.IsNullOrEmpty(title)) title = "Banner";
+
+                // Get subtitle/description
+                string subtitle = GetProp("BannerSubtitle");
+                if (string.IsNullOrEmpty(subtitle)) subtitle = GetProp("Subtitle");
+                if (string.IsNullOrEmpty(subtitle)) subtitle = GetProp("Description");
+
+                // Get icon
+                string iconGlyph = GetProp("BannerIcon");
+                if (string.IsNullOrEmpty(iconGlyph)) iconGlyph = GetProp("Icon");
+                if (string.IsNullOrEmpty(iconGlyph)) iconGlyph = GetProp("IconGlyph");
+
+                var vm = new BannerViewModel
+                {
+                    // Core properties
+                    Title = title,
+                    Subtitle = subtitle,
+                    Description = GetProp("Description"),
+                    Category = !string.IsNullOrEmpty(GetProp("Category")) ? GetProp("Category") : "General",
+
+                    // Layout & Sizing
+                    Height = GetIntProp("Height", 180),
+                    Width = GetIntProp("Width", 700),
+                    FullWidth = GetBoolProp("FullWidth", false),
+                    Layout = !string.IsNullOrEmpty(GetProp("Layout")) ? GetProp("Layout") : "Left",
+                    ContentAlignment = !string.IsNullOrEmpty(GetProp("ContentAlignment")) ? GetProp("ContentAlignment") : "Left",
+                    VerticalAlignment = !string.IsNullOrEmpty(GetProp("VerticalAlignment")) ? GetProp("VerticalAlignment") : "Center",
+                    Padding = !string.IsNullOrEmpty(GetProp("Padding")) ? GetProp("Padding") : "32,24",
+                    CornerRadius = GetIntProp("CornerRadius", 12),
+
+                    // Typography
+                    TitleFontSize = !string.IsNullOrEmpty(GetProp("TitleFontSize")) ? GetProp("TitleFontSize") : "32",
+                    SubtitleFontSize = !string.IsNullOrEmpty(GetProp("SubtitleFontSize")) ? GetProp("SubtitleFontSize") : "16",
+                    DescriptionFontSize = !string.IsNullOrEmpty(GetProp("DescriptionFontSize")) ? GetProp("DescriptionFontSize") : "14",
+                    TitleFontWeight = !string.IsNullOrEmpty(GetProp("TitleFontWeight")) ? GetProp("TitleFontWeight") : "Bold",
+                    SubtitleFontWeight = !string.IsNullOrEmpty(GetProp("SubtitleFontWeight")) ? GetProp("SubtitleFontWeight") : "Normal",
+                    FontFamily = !string.IsNullOrEmpty(GetProp("FontFamily")) ? GetProp("FontFamily") : "Segoe UI",
+                    TitleColor = !string.IsNullOrEmpty(GetProp("TitleColor")) ? GetProp("TitleColor") : "#FFFFFF",
+                    SubtitleColor = !string.IsNullOrEmpty(GetProp("SubtitleColor")) ? GetProp("SubtitleColor") : "#B0B0B0",
+                    DescriptionColor = !string.IsNullOrEmpty(GetProp("DescriptionColor")) ? GetProp("DescriptionColor") : "#909090",
+                    TitleAllCaps = GetBoolProp("TitleAllCaps", false),
+
+                    // Background & Visual Effects
+                    BackgroundColor = !string.IsNullOrEmpty(GetProp("BackgroundColor")) ? GetProp("BackgroundColor") : "#2D2D30",
+                    BackgroundImagePath = GetProp("BackgroundImagePath"),
+                    BackgroundImageOpacity = GetDoubleProp("BackgroundImageOpacity", 0.3),
+                    GradientStart = GetProp("GradientStart"),
+                    GradientEnd = GetProp("GradientEnd"),
+                    GradientAngle = GetDoubleProp("GradientAngle", 90),
+                    BorderColor = !string.IsNullOrEmpty(GetProp("BorderColor")) ? GetProp("BorderColor") : "Transparent",
+                    BorderThickness = GetIntProp("BorderThickness", 0),
+                    ShadowIntensity = !string.IsNullOrEmpty(GetProp("ShadowIntensity")) ? GetProp("ShadowIntensity") : "Medium",
+
+                    // Icon & Image
+                    IconGlyph = iconGlyph,
+                    IconPath = GetProp("IconPath"),
+                    IconPosition = !string.IsNullOrEmpty(GetProp("IconPosition")) ? GetProp("IconPosition") : "Right",
+                    IconSize = GetIntProp("IconSize", 64),
+                    IconColor = !string.IsNullOrEmpty(GetProp("IconColor")) ? GetProp("IconColor") : "#40FFFFFF",
+                    IconAnimation = GetProp("IconAnimation"),
+
+                    // Badge
+                    BadgeText = GetProp("BadgeText"),
+                    BadgeColor = !string.IsNullOrEmpty(GetProp("BadgeColor")) ? GetProp("BadgeColor") : "#0078D4",
+                    BadgePosition = !string.IsNullOrEmpty(GetProp("BadgePosition")) ? GetProp("BadgePosition") : "TopRight",
+
+                    // Progress
+                    ProgressValue = GetIntProp("ProgressValue", 0),
+                    ProgressLabel = GetProp("ProgressLabel"),
+                    ProgressColor = !string.IsNullOrEmpty(GetProp("ProgressColor")) ? GetProp("ProgressColor") : "#0078D4",
+                    ProgressBackgroundColor = !string.IsNullOrEmpty(GetProp("ProgressBackgroundColor")) ? GetProp("ProgressBackgroundColor") : "#404040",
+
+                    // Button
+                    ButtonText = GetProp("ButtonText"),
+                    ButtonColor = !string.IsNullOrEmpty(GetProp("ButtonColor")) ? GetProp("ButtonColor") : "#0078D4",
+
+                    // Interactive
+                    Clickable = GetBoolProp("Clickable", false),
+                    LinkUrl = GetProp("LinkUrl"),
+                    HoverEffect = !string.IsNullOrEmpty(GetProp("HoverEffect")) ? GetProp("HoverEffect") : "None",
+
+                    // Animation
+                    EntranceAnimation = !string.IsNullOrEmpty(GetProp("EntranceAnimation")) ? GetProp("EntranceAnimation") : "None",
+                    AnimationDuration = GetIntProp("AnimationDuration", 300)
+                };
+
+                LoggingService.Trace($"Created BannerViewModel from Control: Title='{vm.Title}', IconGlyph='{vm.IconGlyph}', Height={vm.Height}", component: "MainWindowViewModel");
+                return vm;
+            }
+            catch (Exception ex)
+            {
+                LoggingService.Error($"Failed to create BannerViewModel from control: {ex.Message}", ex, component: "MainWindowViewModel");
+                return new BannerViewModel { Title = "Banner" };
+            }
+        }
+
+        /// <summary>
+        /// Creates a CardViewModel from a Controls collection item (UIControl from Add-UICard cmdlet).
+        /// </summary>
+        private CardViewModel CreateCardFromControl(dynamic control)
+        {
+            try
+            {
+                // Helper to safely get property value from Properties dictionary
+                Func<string, string> GetProp = (key) =>
+                {
+                    try
+                    {
+                        if (control.Properties != null && control.Properties.ContainsKey(key))
+                        {
+                            return control.Properties[key]?.ToString() ?? "";
+                        }
+                    }
+                    catch { }
+                    return "";
+                };
+
+                Func<string, double, double> GetDoubleProp = (key, defaultVal) =>
+                {
+                    double result;
+                    return double.TryParse(GetProp(key), out result) ? result : defaultVal;
+                };
+
+                // Get title from various possible property names
+                string title = GetProp("CardTitle");
+                if (string.IsNullOrEmpty(title)) title = GetProp("Title");
+                if (string.IsNullOrEmpty(title)) title = control.Label?.ToString() ?? "";
+                if (string.IsNullOrEmpty(title)) title = "Card";
+
+                // Get content
+                string content = GetProp("CardContent");
+                if (string.IsNullOrEmpty(content)) content = GetProp("Content");
+
+                var linkUrl = GetProp("CardLinkUrl");
+                if (string.IsNullOrEmpty(linkUrl)) linkUrl = GetProp("LinkUrl");
+                
+                // Get properties with fallback from Card-prefixed to non-prefixed names
+                string imagePath = GetProp("CardImagePath");
+                if (string.IsNullOrEmpty(imagePath)) imagePath = GetProp("ImagePath");
+                
+                string iconPath = GetProp("CardIconPath");
+                if (string.IsNullOrEmpty(iconPath)) iconPath = GetProp("IconPath");
+                
+                string linkText = GetProp("CardLinkText");
+                if (string.IsNullOrEmpty(linkText)) linkText = GetProp("LinkText");
+                if (string.IsNullOrEmpty(linkText)) linkText = "Learn more";
+                
+                string bgColor = GetProp("CardBackgroundColor");
+                if (string.IsNullOrEmpty(bgColor)) bgColor = GetProp("BackgroundColor");
+                
+                string titleColor = GetProp("CardTitleColor");
+                if (string.IsNullOrEmpty(titleColor)) titleColor = GetProp("TitleColor");
+                
+                string contentColor = GetProp("CardContentColor");
+                if (string.IsNullOrEmpty(contentColor)) contentColor = GetProp("ContentColor");
+                
+                string gradientStart = GetProp("CardGradientStart");
+                if (string.IsNullOrEmpty(gradientStart)) gradientStart = GetProp("GradientStart");
+                
+                string gradientEnd = GetProp("CardGradientEnd");
+                if (string.IsNullOrEmpty(gradientEnd)) gradientEnd = GetProp("GradientEnd");
+                
+                double imageOpacity = GetDoubleProp("CardImageOpacity", 0);
+                if (imageOpacity <= 0) imageOpacity = GetDoubleProp("ImageOpacity", 1.0);
+                
+                var vm = new CardViewModel
+                {
+                    Title = title,
+                    Content = content,
+                    ImagePath = imagePath,
+                    IconPath = iconPath,
+                    LinkUrl = linkUrl,
+                    LinkText = linkText,
+                    ImageOpacity = imageOpacity,
+                    BackgroundColor = bgColor,
+                    TitleColor = titleColor,
+                    ContentColor = contentColor,
+                    GradientStart = gradientStart,
+                    GradientEnd = gradientEnd,
+                    OpenLinkCommand = new RelayCommand(param => OpenUrl(param?.ToString()))
+                };
+
+                LoggingService.Trace($"Created CardViewModel from Control: Title='{vm.Title}', LinkUrl='{vm.LinkUrl}'", component: "MainWindowViewModel");
+                return vm;
+            }
+            catch (Exception ex)
+            {
+                LoggingService.Error($"Failed to create CardViewModel from control: {ex.Message}", ex, component: "MainWindowViewModel");
+                return new CardViewModel { Title = "Card" };
+            }
+        }
+
+        /// <summary>
+        /// Creates a BannerViewModel from JSON data using PowerShell for parsing.
+        /// </summary>
+        private BannerViewModel CreateBannerFromJson(string json)
+        {
+            // Use PowerShell to parse JSON (reliable for complex objects)
+            using (var ps = System.Management.Automation.PowerShell.Create())
+            {
+                ps.AddScript($"$json = @'\n{json}\n'@; ConvertFrom-Json $json");
+                var result = ps.Invoke().FirstOrDefault();
+
+                if (result == null) return new BannerViewModel { Title = "Banner" };
+
+                // PSCustomObject needs property access via PSObject.Properties
+                var psObj = result as System.Management.Automation.PSObject;
+                if (psObj == null) return new BannerViewModel { Title = "Banner" };
+
+                // Helper to safely get property value
+                Func<string, string> GetString = (name) => 
+                    psObj.Properties[name]?.Value?.ToString() ?? "";
+                Func<string, int, int> GetInt = (name, def) => 
+                {
+                    var prop = psObj.Properties[name];
+                    if (prop?.Value != null && int.TryParse(prop.Value.ToString(), out int val)) return val;
+                    return def;
+                };
+                Func<string, double, double> GetDouble = (name, def) => 
+                {
+                    var prop = psObj.Properties[name];
+                    if (prop?.Value != null && double.TryParse(prop.Value.ToString(), out double val)) return val;
+                    return def;
+                };
+                Func<string, bool, bool> GetBool = (name, def) => 
+                {
+                    var prop = psObj.Properties[name];
+                    if (prop?.Value != null && bool.TryParse(prop.Value.ToString(), out bool val)) return val;
+                    return def;
+                };
+
+                var iconGlyph = GetString("Icon"); // Segoe MDL2 glyph
+                LoggingService.Info($"Creating banner: Title='{GetString("Title")}', IconGlyph='{iconGlyph}', IconPosition='{GetString("IconPosition")}'", component: "MainWindowViewModel");
+                
+                return new BannerViewModel
+                {
+                    Title = GetString("Title"),
+                    Subtitle = GetString("Subtitle").Length > 0 ? GetString("Subtitle") : GetString("Description"),
+                    Height = GetInt("Height", 180),
+                    Width = GetInt("Width", 700),
+                    CornerRadius = GetInt("CornerRadius", 12),
+                    TitleFontSize = GetString("TitleFontSize").Length > 0 ? GetString("TitleFontSize") : "32",
+                    SubtitleFontSize = GetString("SubtitleFontSize").Length > 0 ? GetString("SubtitleFontSize") : "16",
+                    TitleFontWeight = GetString("TitleFontWeight").Length > 0 ? GetString("TitleFontWeight") : "Bold",
+                    TitleColor = GetString("TitleColor").Length > 0 ? GetString("TitleColor") : "#FFFFFF",
+                    SubtitleColor = GetString("SubtitleColor").Length > 0 ? GetString("SubtitleColor") : "#B0B0B0",
+                    FontFamily = GetString("FontFamily").Length > 0 ? GetString("FontFamily") : "Segoe UI",
+                    BackgroundColor = GetString("BackgroundColor").Length > 0 ? GetString("BackgroundColor") : "#2D2D30",
+                    BackgroundImagePath = GetString("BackgroundImagePath"),
+                    BackgroundImageOpacity = GetDouble("BackgroundImageOpacity", 0.3),
+                    GradientStart = GetString("GradientStart"),
+                    GradientEnd = GetString("GradientEnd"),
+                    GradientAngle = GetDouble("GradientAngle", 90),
+                    IconGlyph = iconGlyph, // Segoe MDL2 glyph
+                    IconPath = GetString("IconPath"), // File path to image
+                    IconPosition = GetString("IconPosition").Length > 0 ? GetString("IconPosition") : "Right",
+                    IconSize = GetInt("IconSize", 64),
+                    IconColor = GetString("IconColor").Length > 0 ? GetString("IconColor") : "#40FFFFFF",
+                    ButtonText = GetString("ButtonText"),
+                    ButtonIcon = GetString("ButtonIcon"),
+                    ButtonColor = GetString("ButtonColor").Length > 0 ? GetString("ButtonColor") : "#0078D4",
+                    ProgressValue = GetInt("ProgressValue", -1),
+                    ProgressLabel = GetString("ProgressLabel"),
+                    LinkUrl = GetString("LinkUrl"),
+                    Clickable = GetBool("Clickable", false)
+                };
+            }
+        }
+
+        /// <summary>
+        /// Opens a URL in the default browser.
+        /// </summary>
+        private void OpenUrl(string url)
+        {
+            if (string.IsNullOrEmpty(url)) return;
+            try
+            {
+                System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo
+                {
+                    FileName = url,
+                    UseShellExecute = true
+                });
+            }
+            catch (Exception ex)
+            {
+                LoggingService.Error($"Failed to open URL '{url}': {ex.Message}", component: "MainWindowViewModel");
+            }
+        }
+
+        #region Workflow Support
+
+        /// <summary>
+        /// Loads workflow tasks from JSON into a WorkflowViewModel.
+        /// </summary>
+        private void LoadWorkflowTasksFromJson(WorkflowViewModel workflowVm, string json)
+        {
+            if (string.IsNullOrWhiteSpace(json)) return;
+
+            try
+            {
+                using (var ps = System.Management.Automation.PowerShell.Create())
+                {
+                    ps.AddScript($"$json = @'\n{json}\n'@; ConvertFrom-Json $json");
+                    var results = ps.Invoke();
+
+                    if (results == null || results.Count == 0) return;
+
+                    // Results could be a single object or an array
+                    var tasksArray = results[0].BaseObject as object[];
+                    if (tasksArray == null)
+                    {
+                        // Try as ArrayList
+                        var arrayList = results[0].BaseObject as System.Collections.ArrayList;
+                        if (arrayList != null)
+                        {
+                            tasksArray = arrayList.ToArray();
+                        }
+                        else
+                        {
+                            // Single task - wrap in array
+                            tasksArray = new object[] { results[0] };
+                        }
+                    }
+
+                    foreach (var taskObj in tasksArray)
+                    {
+                        var psObj = taskObj as System.Management.Automation.PSObject;
+                        if (psObj == null) continue;
+
+                        Func<string, string> GetString = (name) =>
+                            psObj.Properties[name]?.Value?.ToString() ?? "";
+                        Func<string, int, int> GetInt = (name, def) =>
+                        {
+                            var prop = psObj.Properties[name];
+                            if (prop?.Value != null && int.TryParse(prop.Value.ToString(), out int val)) return val;
+                            return def;
+                        };
+                        Func<string, bool, bool> GetBool = (name, def) =>
+                        {
+                            var prop = psObj.Properties[name];
+                            if (prop?.Value != null && bool.TryParse(prop.Value.ToString(), out bool val)) return val;
+                            return def;
+                        };
+
+                        var taskVm = new WorkflowTaskViewModel
+                        {
+                            Name = GetString("Name"),
+                            Title = GetString("Title"),
+                            Description = GetString("Description"),
+                            Order = GetInt("Order", workflowVm.Tasks.Count + 1),
+                            Icon = GetString("Icon"),
+                            ScriptBlockString = GetString("ScriptBlock"),
+                            ScriptPath = GetString("ScriptPath"),
+                            ApprovalMessage = GetString("ApprovalMessage"),
+                            ApproveButtonText = GetString("ApproveButtonText").Length > 0 ? GetString("ApproveButtonText") : "Approve",
+                            RejectButtonText = GetString("RejectButtonText").Length > 0 ? GetString("RejectButtonText") : "Reject",
+                            RequireReason = GetBool("RequireReason", false),
+                            TimeoutMinutes = GetInt("TimeoutMinutes", 0),
+                            OnError = GetString("ErrorAction").Length > 0 ? GetString("ErrorAction") : "Stop"
+                        };
+
+                        // Parse Arguments if present
+                        var argsProp = psObj.Properties["Arguments"];
+                        if (argsProp?.Value != null)
+                        {
+                            var argsObj = argsProp.Value as System.Management.Automation.PSObject;
+                            if (argsObj != null)
+                            {
+                                var args = new Dictionary<string, object>();
+                                foreach (var prop in argsObj.Properties)
+                                {
+                                    args[prop.Name] = prop.Value;
+                                }
+                                taskVm.Arguments = args;
+                            }
+                        }
+
+                        // Parse TaskType
+                        var taskTypeStr = GetString("TaskType");
+                        if (taskTypeStr.Equals("ApprovalGate", StringComparison.OrdinalIgnoreCase))
+                        {
+                            taskVm.TaskType = WorkflowTaskType.ApprovalGate;
+                        }
+                        else
+                        {
+                            taskVm.TaskType = WorkflowTaskType.Normal;
+                        }
+
+                        // Check if task was pre-completed (resume scenario)
+                        if (GetBool("PreCompleted", false))
+                        {
+                            taskVm.Status = WorkflowTaskStatus.Completed;
+                            taskVm.ProgressPercent = GetInt("PreCompletedProgress", 100);
+                            taskVm.ProgressMessage = GetString("PreCompletedMessage");
+                            if (string.IsNullOrEmpty(taskVm.ProgressMessage))
+                            {
+                                taskVm.ProgressMessage = "Completed (from previous run)";
+                            }
+                            LoggingService.Info($"Task '{taskVm.Name}' pre-completed from resume state", component: "MainWindowViewModel");
+                        }
+
+                        workflowVm.AddTask(taskVm);
+                        LoggingService.Info($"Loaded workflow task: {taskVm.Name} ({taskVm.Title})", component: "MainWindowViewModel");
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                LoggingService.Error($"Failed to load workflow tasks from JSON: {ex.Message}", ex, component: "MainWindowViewModel");
+            }
+        }
+
+        /// <summary>
+        /// Sets up commands for a WorkflowViewModel.
+        /// </summary>
+        private void SetupWorkflowCommands(WorkflowViewModel workflowVm, Services.WizardStep stepInfo)
+        {
+            Services.WorkflowExecutor executor = null;
+
+            // Initialize logging with script path (logs go to script folder/Logs by default)
+            // Use OriginalScriptPath from branding if available (for Module API), otherwise use _scriptPath
+            string scriptPathForLogs = _parsedData?.Branding?.OriginalScriptPath;
+            if (string.IsNullOrEmpty(scriptPathForLogs))
+            {
+                scriptPathForLogs = _scriptPath;
+            }
+            else
+            {
+                // OriginalScriptPath is a directory, construct a fake script path for log folder calculation
+                scriptPathForLogs = System.IO.Path.Combine(scriptPathForLogs, "script.ps1");
+            }
+            string customLogPath = _parsedData?.Branding?.LogPath;
+            string previousLogFilePath = _parsedData?.Branding?.PreviousLogFilePath;
+            workflowVm.InitializeLogging(scriptPathForLogs, customLogPath, previousLogFilePath);
+
+            workflowVm.StartCommand = new RelayCommand(async _ =>
+            {
+                try
+                {
+                    LoggingService.Info("Starting workflow execution", component: "MainWindowViewModel");
+
+                    // Collect form data from previous steps
+                    var wizardResults = new Dictionary<string, object>();
+                    foreach (var kvp in FormData)
+                    {
+                        wizardResults[kvp.Key] = kvp.Value;
+                    }
+
+                    executor = new Services.WorkflowExecutor(
+                        workflowVm,
+                        wizardResults,
+                        onTaskStarted: task => LoggingService.Info($"Task started: {task.Name}", component: "WorkflowExecutor"),
+                        onTaskCompleted: task => LoggingService.Info($"Task completed: {task.Name}", component: "WorkflowExecutor"),
+                        onTaskFailed: (task, ex) => LoggingService.Error($"Task failed: {task.Name}", ex, component: "WorkflowExecutor"),
+                        onRebootRequested: reason => LoggingService.Info($"Reboot requested: {reason}", component: "WorkflowExecutor"),
+                        scriptPath: _scriptPath
+                    );
+
+                    await executor.ExecuteAsync(System.Threading.CancellationToken.None);
+
+                    if (workflowVm.IsCompleted)
+                    {
+                        LoggingService.Info("Workflow completed successfully", component: "MainWindowViewModel");
+                    }
+                }
+                catch (Exception ex)
+                {
+                    LoggingService.Error($"Workflow execution failed: {ex.Message}", ex, component: "MainWindowViewModel");
+                }
+            }, _ => workflowVm.CanStart);
+
+            workflowVm.CancelCommand = new RelayCommand(_ =>
+            {
+                if (executor != null)
+                {
+                    executor.Cancel();
+                    LoggingService.Info("Workflow cancelled by user", component: "MainWindowViewModel");
+                }
+            }, _ => workflowVm.IsExecuting);
+
+            workflowVm.CloseCommand = new RelayCommand(_ =>
+            {
+                if (workflowVm.IsCompleted || workflowVm.HasFailed)
+                {
+                    // Close the window
+                    System.Windows.Application.Current.MainWindow?.Close();
+                }
+            }, _ => workflowVm.IsCompleted || workflowVm.HasFailed);
+        }
+
+        #endregion
     }
 } 

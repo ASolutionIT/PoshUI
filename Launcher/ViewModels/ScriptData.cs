@@ -10,6 +10,6 @@ namespace Launcher.ViewModels
         public List<WizardStep> WizardSteps { get; set; } = new List<WizardStep>();
         public WizardBranding Branding { get; set; }
         public string SidebarHeaderIconOrientation { get; set; }
-        // Add other script-related properties here if needed
+        public string ScriptBody { get; set; }
     }
 }

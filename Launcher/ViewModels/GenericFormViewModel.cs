@@ -14,6 +14,7 @@ namespace Launcher.ViewModels
         private string _description;
         private ObservableCollection<ParameterViewModel> _parameters = new ObservableCollection<ParameterViewModel>();
         private ObservableCollection<CardViewModel> _additionalCards = new ObservableCollection<CardViewModel>();
+        private ObservableCollection<BannerViewModel> _banners = new ObservableCollection<BannerViewModel>();
 
         public string Title
         {
@@ -37,6 +38,12 @@ namespace Launcher.ViewModels
         {
             get => _additionalCards;
             set { _additionalCards = value; OnPropertyChanged(); }
+        }
+
+        public ObservableCollection<BannerViewModel> Banners
+        {
+            get => _banners;
+            set { _banners = value; OnPropertyChanged(); }
         }
 
         public GenericFormViewModel(string title, string description = "")

@@ -11,7 +11,7 @@ namespace Launcher.Services
     /// </summary>
     public static class AuditLogger
     {
-        private const string EventSource = "PoshWizard";
+        private const string EventSource = "PoshUI";
         private const string EventLogName = "Application";
         private static bool _isInitialized = false;
         private static readonly object _lock = new object();

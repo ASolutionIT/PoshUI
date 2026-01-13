@@ -243,9 +243,46 @@ namespace Launcher
                 {
                     if (!string.IsNullOrEmpty(message))
                     {
-                        MessageBox.Show(message, "Validation Error", MessageBoxButton.OK, MessageBoxImage.Warning);
+                        Views.MessageDialog.ShowWarning(message, "Validation Error", this);
                     }
                     e.Cancel = true;
+                }
+            }
+        }
+
+        private void ExportButton_Click(object sender, RoutedEventArgs e)
+        {
+            // Show context menu when export button is clicked
+            var button = sender as Button;
+            if (button?.ContextMenu != null)
+            {
+                button.ContextMenu.PlacementTarget = button;
+                button.ContextMenu.IsOpen = true;
+            }
+        }
+
+        private void DataGrid_Sorting(object sender, DataGridSortingEventArgs e)
+        {
+            // Allow default sorting behavior
+            // This event handler is here to ensure the XAML reference is valid
+            // The DataGrid will handle sorting automatically
+        }
+
+        private void ToggleSidebarButton_Click(object sender, RoutedEventArgs e)
+        {
+            var viewModel = DataContext as MainWindowViewModel;
+            if (viewModel != null)
+            {
+                viewModel.IsSidebarCollapsed = !viewModel.IsSidebarCollapsed;
+                
+                // Animate sidebar width
+                if (viewModel.IsSidebarCollapsed)
+                {
+                    SidebarColumn.Width = new GridLength(60);
+                }
+                else
+                {
+                    SidebarColumn.Width = new GridLength(280);
                 }
             }
         }

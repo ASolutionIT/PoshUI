@@ -36,9 +36,9 @@ namespace Launcher.Services
         }
 
         /// <summary>
-        /// Registers a dynamic parameter from a WizardDataSourceAttribute.
+        /// Registers a dynamic parameter from a UIDataSourceAttribute.
         /// </summary>
-        public void RegisterParameter(string paramName, WizardDataSourceAttribute attribute)
+        public void RegisterParameter(string paramName, UIDataSourceAttribute attribute)
         {
             if (string.IsNullOrEmpty(paramName))
                 throw new ArgumentNullException(nameof(paramName));
@@ -108,16 +108,20 @@ namespace Launcher.Services
             catch (Exception ex)
             {
                 stopwatch.Stop();
-                LoggingService.Error($"Failed to execute data source for '{paramName}' after {stopwatch.ElapsedMilliseconds}ms: {ex.Message}", component: "DynamicParameterManager");
+                // Unwrap AggregateException to get the actual error
+                var actualException = ex is AggregateException aex && aex.InnerException != null 
+                    ? aex.InnerException 
+                    : ex;
+                LoggingService.Error($"Failed to execute data source for '{paramName}' after {stopwatch.ElapsedMilliseconds}ms: {actualException.Message}", component: "DynamicParameterManager");
 
-                return new[] { $"Error: {ex.Message}" };
+                return new[] { $"Error: {actualException.Message}" };
             }
         }
 
         /// <summary>
         /// Executes a script block with timeout and returns the results as a string array.
         /// </summary>
-        private string[] ExecuteScriptBlock(string paramName, WizardDataSourceAttribute attr, Dictionary<string, object> parameterValues)
+        private string[] ExecuteScriptBlock(string paramName, UIDataSourceAttribute attr, Dictionary<string, object> parameterValues)
         {
             using (var cts = new CancellationTokenSource(TimeSpan.FromSeconds(ExecutionOptions.TimeoutSeconds)))
             {
@@ -129,7 +133,7 @@ namespace Launcher.Services
                         {
                             ps.Runspace = _runspace;
 
-                            // Add the script block
+                            // Add the script block - pass directly without wrapping in braces
                             ps.AddScript(attr.ScriptBlock.ToString());
 
                             // Add parameters if there are dependencies
@@ -224,7 +228,7 @@ namespace Launcher.Services
         /// <summary>
         /// Executes a CSV-based data source with detailed error reporting.
         /// </summary>
-        private string[] ExecuteCsvSource(string paramName, WizardDataSourceAttribute attr)
+        private string[] ExecuteCsvSource(string paramName, UIDataSourceAttribute attr)
         {
             string specifiedPath = attr.CsvPath;
             string resolvedPath = null;
@@ -540,7 +544,7 @@ namespace Launcher.Services
         private class DynamicParameterInfo
         {
             public string Name { get; set; }
-            public WizardDataSourceAttribute Attribute { get; set; }
+            public UIDataSourceAttribute Attribute { get; set; }
             public List<string> DependsOn { get; set; }
         }
 

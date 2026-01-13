@@ -65,10 +65,11 @@
     <SolidColorBrush x:Key="InfoBrush" Color="{StaticResource InfoColor}"/>
 
     <!-- ═══ SURFACE & BACKGROUND BRUSHES ═══ -->
-    <SolidColorBrush x:Key="AppBackgroundBrush" Color="#ECEFF3"/>
-    <SolidColorBrush x:Key="ContentBackgroundBrush" Color="#FFFFFF"/>
+    <SolidColorBrush x:Key="AppBackgroundBrush" Color="#E8ECF0"/>
+    <SolidColorBrush x:Key="ContentBackgroundBrush" Color="#F0F3F6"/>
     <SolidColorBrush x:Key="CardBackgroundBrush" Color="#FFFFFF"/>
-    <SolidColorBrush x:Key="BackgroundBrush" Color="#FFFFFF"/>
+    <SolidColorBrush x:Key="ChartBackgroundBrush" Color="#F8F9FA"/>
+    <SolidColorBrush x:Key="BackgroundBrush" Color="#F0F3F6"/>
     
     <!-- ═══ SIDEBAR THEME (Dark) ═══ -->
     <SolidColorBrush x:Key="SidebarBackgroundBrush" Color="#1A202C"/>
@@ -83,6 +84,7 @@
     <!-- ═══ TEXT BRUSHES ═══ -->
     <SolidColorBrush x:Key="HeadingForegroundBrush" Color="{StaticResource Gray900}"/>
     <SolidColorBrush x:Key="BodyForegroundBrush" Color="{StaticResource Gray700}"/>
+    <SolidColorBrush x:Key="SecondaryForegroundBrush" Color="{StaticResource Gray600}"/>
     <SolidColorBrush x:Key="SecondaryBrush" Color="{StaticResource Gray600}"/>
     <SolidColorBrush x:Key="DisabledForegroundBrush" Color="{StaticResource Gray500}"/>
     
@@ -108,6 +110,11 @@
     <SolidColorBrush x:Key="TitleBarBorderBrush" Color="{StaticResource Gray300}"/>
     <SolidColorBrush x:Key="TitleBarButtonHoverBrush" Color="#E0E0E0"/>
     <SolidColorBrush x:Key="TitleBarButtonPressedBrush" Color="#CCCCCC"/>
+    
+    <!-- ═══ DIALOG TITLE BAR BRUSHES ═══ -->
+    <SolidColorBrush x:Key="DialogTitleBarBrush" Color="{StaticResource Gray200}"/>
+    <SolidColorBrush x:Key="DialogTitleBarForegroundBrush" Color="{StaticResource Gray900}"/>
+    <SolidColorBrush x:Key="DialogTitleBarHoverBrush" Color="{StaticResource Gray300}"/>
     
     <!-- ═══ SHADOW EFFECTS (Elevation) ═══ -->
     <DropShadowEffect x:Key="ShadowDepth1" 

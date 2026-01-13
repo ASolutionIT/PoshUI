@@ -43,7 +43,9 @@
 
     <SolidColorBrush x:Key="HeadingForegroundBrush" Color="#F3F4F6"/>
     <SolidColorBrush x:Key="BodyForegroundBrush" Color="#FAFAFA"/>
+    <SolidColorBrush x:Key="SecondaryForegroundBrush" Color="#B0B0B0"/>
     <SolidColorBrush x:Key="CardBackgroundBrush" Color="#1A1A1A"/>
+    <SolidColorBrush x:Key="ChartBackgroundBrush" Color="#0F0F0F"/>
 
     <!-- Subtle overlays for icon-only buttons (dark theme) -->
     <SolidColorBrush x:Key="IconButtonHoverBrush" Color="#33FFFFFF"/>
@@ -140,4 +142,9 @@
     <SolidColorBrush x:Key="TitleBarBorderBrush" Color="#3F3F46"/>
     <SolidColorBrush x:Key="TitleBarButtonHoverBrush" Color="#3F3F46"/>
     <SolidColorBrush x:Key="TitleBarButtonPressedBrush" Color="#2D2D30"/>
+    
+    <!-- Dialog Title Bar - Dark Theme -->
+    <SolidColorBrush x:Key="DialogTitleBarBrush" Color="#2D2D30"/>
+    <SolidColorBrush x:Key="DialogTitleBarForegroundBrush" Color="#FFFFFF"/>
+    <SolidColorBrush x:Key="DialogTitleBarHoverBrush" Color="#3F3F46"/>
 </ResourceDictionary> 

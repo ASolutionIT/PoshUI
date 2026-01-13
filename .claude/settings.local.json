@@ -1,0 +1,17 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(Select-Object -First 10 FullName, LastWriteTime)",
+      "Bash(Sort-Object LastWriteTime -Descending)",
+      "Bash(Start-Sleep -Seconds 15)",
+      "Bash(git checkout:*)",
+      "Bash(Get-ChildItem -Path . -Force)",
+      "Bash(Select-Object -First 20 Name, Mode, LastWriteTime)",
+      "Bash(Format-Table -AutoSize)",
+      "Bash(test:*)",
+      "Bash(dotnet build:*)"
+    ],
+    "deny": [],
+    "ask": []
+  }
+}

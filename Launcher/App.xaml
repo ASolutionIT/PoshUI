@@ -11,7 +11,11 @@
 
             <!-- Converters available at app scope (needed for MainWindow Icon binding) -->
             <converters:FilePathToImageSourceConverter x:Key="FilePathToImageSourceConverter" />
+            <converters:StringToBrushConverter x:Key="StringToBrushConverter" />
+            <converters:NullOrEmptyToFalseConverter x:Key="NullOrEmptyToFalseConverter" />
+            <converters:ObjectTypeConverter x:Key="ObjectTypeConverter" />
             <BooleanToVisibilityConverter x:Key="BooleanToVisibilityConverter"/>
+            <converters:InverseBooleanToVisibilityConverter x:Key="InverseBooleanToVisibilityConverter"/>
         </ResourceDictionary>
     </Application.Resources>
 </Application>

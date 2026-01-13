@@ -34,18 +34,24 @@ namespace Launcher.Services
 
         /// <summary>
         /// Gets the current signature verification mode from configuration.
-        /// Default is Warn for development, should be Enforce for production.
+        /// Default is Disabled for development. Use POSHUI_SIGNATURE_MODE environment variable to change.
         /// </summary>
         public static VerificationMode CurrentMode
         {
             get
             {
-                // Check environment variable or config file
-                string modeString = Environment.GetEnvironmentVariable("POSHWIZARD_SIGNATURE_MODE");
+                // Check environment variable for signature mode
+                string modeString = Environment.GetEnvironmentVariable("POSHUI_SIGNATURE_MODE");
                 if (string.IsNullOrEmpty(modeString))
                 {
-                    // Default to Warn for development compatibility
+#if DEBUG
+                    // Development builds: Disabled for ease of development
+                    return VerificationMode.Disabled;
+#else
+                    // Production builds: Warn (log violations but allow execution)
+                    // For strict security, set POSHUI_SIGNATURE_MODE=Enforce
                     return VerificationMode.Warn;
+#endif
                 }
 
                 if (Enum.TryParse<VerificationMode>(modeString, true, out var mode))

@@ -22,16 +22,30 @@ namespace Launcher
             try
             {
                 base.OnStartup(e);
-                
+
+                // Check .NET Framework version before anything else
+                if (!ValidateDotNetFrameworkVersion())
+                {
+                    MessageBox.Show(
+                        "This application requires .NET Framework 4.8 or later.\n\n" +
+                        "Please install .NET Framework 4.8 from:\n" +
+                        "https://dotnet.microsoft.com/download/dotnet-framework/net48",
+                        "Missing Required Framework",
+                        MessageBoxButton.OK,
+                        MessageBoxImage.Error);
+                    Shutdown(1);
+                    return;
+                }
+
                 // Parse command line arguments first to configure logging
                 var (scriptPath, debugEnabled, allowUnrestricted) = ParseCommandLineArgs(e.Args);
-                
+
                 // Initialize logging with debug settings
                 LoggingService.Initialize(debugEnabled);
-                
+
                 // Initialize audit logging
                 AuditLogger.Initialize();
-                
+
                 LoggingService.Info("Application starting");
                 LoggingService.Info($"Current directory: {Environment.CurrentDirectory}");
                 LoggingService.Info($"Debug mode: {debugEnabled}");
@@ -240,6 +254,50 @@ namespace Launcher
             */
 
             return (scriptPath, debugEnabled, allowUnrestricted);
+        }
+
+        /// <summary>
+        /// Validates that .NET Framework 4.8 or later is installed.
+        /// </summary>
+        private bool ValidateDotNetFrameworkVersion()
+        {
+            try
+            {
+                // Check CLR version (.NET Framework 4.8 uses CLR 4.0)
+                var clrVersion = Environment.Version;
+
+                // .NET Framework 4.8 reports as CLR 4.0.30319.xxxxx
+                // We need at least CLR 4.0.30319.42000 (which is .NET 4.6+)
+                // For .NET 4.8 specifically, we check the release key in registry
+
+                if (clrVersion.Major < 4)
+                {
+                    return false;
+                }
+
+                // Additional check: Read .NET Framework release from registry
+                // .NET Framework 4.8 = release key 528040 or higher
+                using (var ndpKey = Microsoft.Win32.Registry.LocalMachine.OpenSubKey(@"SOFTWARE\Microsoft\NET Framework Setup\NDP\v4\Full\"))
+                {
+                    if (ndpKey != null)
+                    {
+                        var releaseKey = ndpKey.GetValue("Release");
+                        if (releaseKey != null && (int)releaseKey >= 528040)
+                        {
+                            return true; // .NET Framework 4.8 or later
+                        }
+                    }
+                }
+
+                // If we can't determine version from registry, check CLR version
+                // CLR 4.0.30319.42000+ is .NET Framework 4.6+
+                return clrVersion.Major >= 4 && clrVersion.Build >= 30319;
+            }
+            catch
+            {
+                // If version check fails, assume it's not installed
+                return false;
+            }
         }
     }
 } 

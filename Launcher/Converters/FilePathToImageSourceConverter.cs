@@ -34,15 +34,17 @@ namespace Launcher.Converters
                     }
                     else
                     {
-                        // Log: File not found at path
+#if DEBUG
                         System.Diagnostics.Debug.WriteLine($"FilePathToImageSourceConverter: File not found at '{filePath}'");
+#endif
                         return null; // Or return a default fallback image source
                     }
                 }
                 catch (Exception ex)
                 {
-                    // Log: Error loading image
+#if DEBUG
                     System.Diagnostics.Debug.WriteLine($"FilePathToImageSourceConverter: Error loading image from '{filePath}'. Error: {ex.Message}");
+#endif
                     return null; // Or return a default fallback image source
                 }
             }

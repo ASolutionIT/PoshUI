@@ -1,0 +1,6 @@
+{
+  "Endpoint": "<Code Signing Account Endpoint>",
+  "CodeSigningAccountName": "<Code Signing Account Name>",
+  "CertificateProfileName": "<Certificate Profile Name>",
+  "CorrelationId": "<Optional CorrelationId>"
+}

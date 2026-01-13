@@ -8,39 +8,39 @@
     <UseWindowsForms>true</UseWindowsForms>
     <LangVersion>7.3</LangVersion> <!-- C# 7.3 is compatible with .NET Framework 4.8 -->
     <RootNamespace>Launcher</RootNamespace>
-    <AssemblyName>Poshwizard</AssemblyName>
+    <AssemblyName>PoshUI</AssemblyName>
      <!-- Flatten output path: place outputs directly under bin/Debug or bin/Release (no net48 folder) -->
      <AppendTargetFrameworkToOutputPath>false</AppendTargetFrameworkToOutputPath>
      <!-- PlatformTarget AnyCPU is default for SDK-style but can be specified if needed -->
      <!-- <PlatformTarget>AnyCPU</PlatformTarget> -->
      <!-- RuntimeIdentifiers typically not needed for AnyCPU .NET Framework builds -->
-    
+
     <!-- Assembly Metadata -->
-    <AssemblyTitle>PoshWizard</AssemblyTitle>
-    <Product>PoshWizard</Product>
-    <Description>WPF application for creating wizard frontends for PowerShell scripts with modern Windows 11 UI</Description>
+    <AssemblyTitle>PoshUI</AssemblyTitle>
+    <Product>PoshUI</Product>
+    <Description>WPF application for creating interactive UI frontends for PowerShell scripts with modern Windows 11 UI (Legacy .NET 4.8 version)</Description>
     <Company>A Solution IT LLC</Company>
     <Authors>A Solution IT LLC</Authors>
     <Copyright>Copyright © 2025 A Solution IT LLC. All rights reserved.</Copyright>
-    <Version>1.4.1.0</Version>
-    <AssemblyVersion>1.4.1.0</AssemblyVersion>
-    <FileVersion>1.4.1.0</FileVersion>
+    <Version>2.0.0.0</Version>
+    <AssemblyVersion>2.0.0.0</AssemblyVersion>
+    <FileVersion>2.0.0.0</FileVersion>
     <NeutralLanguage>en-US</NeutralLanguage>
-    
+
     <!-- Package/Repository Information -->
-    <PackageProjectUrl>https://github.com/asolutionit/PoshWizard</PackageProjectUrl>
-    <RepositoryUrl>https://github.com/asolutionit/PoshWizard</RepositoryUrl>
+    <PackageProjectUrl>https://github.com/asolutionit/PoshUI</PackageProjectUrl>
+    <RepositoryUrl>https://github.com/asolutionit/PoshUI</RepositoryUrl>
     <RepositoryType>git</RepositoryType>
     <PackageLicenseExpression>MIT</PackageLicenseExpression>
-    <PackageTags>PowerShell;Wizard;WPF;GUI;Windows;ModernUI</PackageTags>
+    <PackageTags>PowerShell;UI;WPF;GUI;Windows;ModernUI</PackageTags>
   </PropertyGroup>
 
   <PropertyGroup Condition="'$(Configuration)|$(Platform)' == 'Debug|AnyCPU'">
-    <OutputPath>..\PoshWizard\bin\</OutputPath>
+    <OutputPath>..\PoshUI\bin\</OutputPath>
   </PropertyGroup>
 
   <PropertyGroup Condition="'$(Configuration)|$(Platform)' == 'Release|AnyCPU'">
-    <OutputPath>..\PoshWizard\bin\</OutputPath>
+    <OutputPath>..\PoshUI\bin\</OutputPath>
   </PropertyGroup>
 
   <ItemGroup>
@@ -54,10 +54,8 @@
     <!-- Other standard framework references (System, System.Data, System.Xml, WindowsBase, PresentationCore, PresentationFramework, System.Xaml)
          are typically included automatically by the SDK when targeting .NET Framework and UseWPF=true.
          If any build errors occur related to missing framework assemblies, they can be added explicitly:
-         <Reference Include="System.ComponentModel.Composition" />
-         <Reference Include="System.ComponentModel.DataAnnotations" />
-         <Reference Include="System.Management" />
     -->
+    <Reference Include="System.Management" />
     <Reference Include="System.Windows.Forms" />
     <Reference Include="WindowsFormsIntegration" />
   </ItemGroup>

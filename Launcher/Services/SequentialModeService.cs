@@ -40,7 +40,7 @@ namespace Launcher.Services
 
         public SequentialModeService()
         {
-            _pipeName = $"PoshWizard_{Process.GetCurrentProcess().Id}_{Guid.NewGuid():N}";
+            _pipeName = $"PoshUI_{Process.GetCurrentProcess().Id}_{Guid.NewGuid():N}";
             _sessions = new Dictionary<string, WizardSession>();
             _cancellationTokenSource = new CancellationTokenSource();
         }
@@ -209,11 +209,11 @@ namespace Launcher.Services
                 LoggingService.Debug($"Processing message: {messageJson.Substring(0, Math.Min(100, messageJson.Length))}...", "SequentialMode");
                 
                 // Deserialize using built-in DataContractJsonSerializer
-                WizardMessage message;
+                UIMessage message;
                 using (var ms = new MemoryStream(Encoding.UTF8.GetBytes(messageJson)))
                 {
-                    var serializer = new DataContractJsonSerializer(typeof(WizardMessage));
-                    message = (WizardMessage)serializer.ReadObject(ms);
+                    var serializer = new DataContractJsonSerializer(typeof(UIMessage));
+                    message = (UIMessage)serializer.ReadObject(ms);
                 }
                 
                 // Validate message security
@@ -243,7 +243,7 @@ namespace Launcher.Services
             }
         }
 
-        private bool ValidateMessage(WizardMessage message)
+        private bool ValidateMessage(UIMessage message)
         {
             if (message == null)
             {
@@ -278,33 +278,33 @@ namespace Launcher.Services
             return true;
         }
 
-        private async Task HandleMessage(WizardMessage message)
+        private async Task HandleMessage(UIMessage message)
         {
             LoggingService.Info($"Handling message: {message.Type} ({message.MessageId})", "SequentialMode");
 
             switch (message.Type)
             {
-                case WizardMessageType.CreateSession:
+                case UIMessageType.CreateSession:
                     await HandleCreateSession(message);
                     break;
                     
-                case WizardMessageType.AddStep:
+                case UIMessageType.AddStep:
                     await HandleAddStep(message);
                     break;
                     
-                case WizardMessageType.ExecuteStep:
+                case UIMessageType.ExecuteStep:
                     await HandleExecuteStep(message);
                     break;
                     
-                case WizardMessageType.SetVariable:
+                case UIMessageType.SetVariable:
                     await HandleSetVariable(message);
                     break;
                     
-                case WizardMessageType.GetVariable:
+                case UIMessageType.GetVariable:
                     await HandleGetVariable(message);
                     break;
                     
-                case WizardMessageType.CloseSession:
+                case UIMessageType.CloseSession:
                     await HandleCloseSession(message);
                     break;
                     
@@ -315,7 +315,7 @@ namespace Launcher.Services
             }
         }
 
-        private async Task HandleCreateSession(WizardMessage message)
+        private async Task HandleCreateSession(UIMessage message)
         {
             try
             {
@@ -347,11 +347,11 @@ namespace Launcher.Services
                 }
 
                 // Send success response
-                var response = new WizardMessage
+                var response = new UIMessage
                 {
                     MessageId = message.MessageId,  // Use the same MessageId as the request
                     SessionId = sessionId,
-                    Type = WizardMessageType.SessionCreated,
+                    Type = UIMessageType.SessionCreated,
                     Payload = new SessionCreatedPayload
                     {
                         SessionId = sessionId,
@@ -426,7 +426,7 @@ namespace Launcher.Services
             }
         }
 
-        private async Task HandleAddStep(WizardMessage message)
+        private async Task HandleAddStep(UIMessage message)
         {
             try
             {
@@ -482,10 +482,10 @@ namespace Launcher.Services
                     });
                 }
                 
-                var response = new WizardMessage
+                var response = new UIMessage
                 {
                     SessionId = message.SessionId,
-                    Type = WizardMessageType.StepStarted,
+                    Type = UIMessageType.StepStarted,
                     Payload = new { StepId = payload.StepId, Success = true },
                     MessageId = message.MessageId
                 };
@@ -499,7 +499,7 @@ namespace Launcher.Services
             }
         }
 
-        private async Task HandleExecuteStep(WizardMessage message)
+        private async Task HandleExecuteStep(UIMessage message)
         {
             try
             {
@@ -531,10 +531,10 @@ namespace Launcher.Services
                 }
 
                 // Notify that the step has started
-                var startedMsg = new WizardMessage
+                var startedMsg = new UIMessage
                 {
                     SessionId = message.SessionId,
-                    Type = WizardMessageType.StepStarted,
+                    Type = UIMessageType.StepStarted,
                     Payload = new StepResultPayload
                     {
                         StepId = step.StepId,
@@ -611,10 +611,10 @@ namespace Launcher.Services
                                         var text = rec?.MessageData?.ToString() ?? rec?.ToString();
                                         if (!string.IsNullOrEmpty(text))
                                         {
-                                            var co = new WizardMessage
+                                            var co = new UIMessage
                                             {
                                                 SessionId = message.SessionId,
-                                                Type = WizardMessageType.ConsoleOutput,
+                                                Type = UIMessageType.ConsoleOutput,
                                                 Payload = new ConsoleOutputPayload { Level = "INFO", Message = text, Source = "PowerShell" }
                                             };
                                             var _ = SendMessage(co);
@@ -627,10 +627,10 @@ namespace Launcher.Services
                                     try
                                     {
                                         var text = ps.Streams.Warning[e.Index].ToString();
-                                        var co = new WizardMessage
+                                        var co = new UIMessage
                                         {
                                             SessionId = message.SessionId,
-                                            Type = WizardMessageType.ConsoleOutput,
+                                            Type = UIMessageType.ConsoleOutput,
                                             Payload = new ConsoleOutputPayload { Level = "WARNING", Message = text, Source = "PowerShell" }
                                         };
                                         var _ = SendMessage(co);
@@ -642,10 +642,10 @@ namespace Launcher.Services
                                     try
                                     {
                                         var text = ps.Streams.Verbose[e.Index].ToString();
-                                        var co = new WizardMessage
+                                        var co = new UIMessage
                                         {
                                             SessionId = message.SessionId,
-                                            Type = WizardMessageType.ConsoleOutput,
+                                            Type = UIMessageType.ConsoleOutput,
                                             Payload = new ConsoleOutputPayload { Level = "VERBOSE", Message = text, Source = "PowerShell" }
                                         };
                                         var _ = SendMessage(co);
@@ -657,10 +657,10 @@ namespace Launcher.Services
                                     try
                                     {
                                         var text = ps.Streams.Debug[e.Index].ToString();
-                                        var co = new WizardMessage
+                                        var co = new UIMessage
                                         {
                                             SessionId = message.SessionId,
-                                            Type = WizardMessageType.ConsoleOutput,
+                                            Type = UIMessageType.ConsoleOutput,
                                             Payload = new ConsoleOutputPayload { Level = "DEBUG", Message = text, Source = "PowerShell" }
                                         };
                                         var _ = SendMessage(co);
@@ -672,10 +672,10 @@ namespace Launcher.Services
                                     try
                                     {
                                         var text = ps.Streams.Error[e.Index].ToString();
-                                        var co = new WizardMessage
+                                        var co = new UIMessage
                                         {
                                             SessionId = message.SessionId,
-                                            Type = WizardMessageType.ConsoleOutput,
+                                            Type = UIMessageType.ConsoleOutput,
                                             Payload = new ConsoleOutputPayload { Level = "ERROR", Message = text, Source = "PowerShell" }
                                         };
                                         var _ = SendMessage(co);
@@ -691,10 +691,10 @@ namespace Launcher.Services
                                         var o = output[e.Index];
                                         if (o != null)
                                         {
-                                            var co = new WizardMessage
+                                            var co = new UIMessage
                                             {
                                                 SessionId = message.SessionId,
-                                                Type = WizardMessageType.ConsoleOutput,
+                                                Type = UIMessageType.ConsoleOutput,
                                                 Payload = new ConsoleOutputPayload { Level = "OUTPUT", Message = o.ToString(), Source = "PowerShell" }
                                             };
                                             var _ = SendMessage(co);
@@ -757,10 +757,10 @@ namespace Launcher.Services
                             catch { }
                         }
 
-                        var completionMessage = new WizardMessage
+                        var completionMessage = new UIMessage
                         {
                             SessionId = message.SessionId,
-                            Type = success ? WizardMessageType.StepCompleted : WizardMessageType.StepFailed,
+                            Type = success ? UIMessageType.StepCompleted : UIMessageType.StepFailed,
                             Payload = resultPayload,
                             MessageId = requestMessageId
                         };
@@ -805,10 +805,10 @@ namespace Launcher.Services
                             EndTime = end,
                             Duration = end - stepStart
                         };
-                        var failMessage = new WizardMessage
+                        var failMessage = new UIMessage
                         {
                             SessionId = message.SessionId,
-                            Type = WizardMessageType.StepFailed,
+                            Type = UIMessageType.StepFailed,
                             Payload = failPayload,
                             MessageId = requestMessageId
                         };
@@ -881,7 +881,7 @@ namespace Launcher.Services
             return null;
         }
 
-        private async Task HandleSetVariable(WizardMessage message)
+        private async Task HandleSetVariable(UIMessage message)
         {
             try
             {
@@ -892,10 +892,10 @@ namespace Launcher.Services
                     session.Variables[payload.Name] = payload.Value;
                     LoggingService.Debug($"Variable set: {payload.Name} = {payload.Value}", "SequentialMode");
                     
-                    await SendMessage(new WizardMessage
+                    await SendMessage(new UIMessage
                     {
                         SessionId = message.SessionId,
-                        Type = WizardMessageType.SetVariable,
+                        Type = UIMessageType.SetVariable,
                         Payload = new { Success = true },
                         MessageId = message.MessageId
                     });
@@ -912,7 +912,7 @@ namespace Launcher.Services
             }
         }
 
-        private async Task HandleGetVariable(WizardMessage message)
+        private async Task HandleGetVariable(UIMessage message)
         {
             try
             {
@@ -922,10 +922,10 @@ namespace Launcher.Services
                 {
                     var value = session.Variables.TryGetValue(payload.Name, out var val) ? val : null;
                     
-                    await SendMessage(new WizardMessage
+                    await SendMessage(new UIMessage
                     {
                         SessionId = message.SessionId,
-                        Type = WizardMessageType.GetVariable,
+                        Type = UIMessageType.GetVariable,
                         Payload = new VariablePayload { Name = payload.Name, Value = value },
                         MessageId = message.MessageId
                     });
@@ -942,7 +942,7 @@ namespace Launcher.Services
             }
         }
 
-        private async Task HandleCloseSession(WizardMessage message)
+        private async Task HandleCloseSession(UIMessage message)
         {
             try
             {
@@ -961,10 +961,10 @@ namespace Launcher.Services
                     }
                 }
                 
-                await SendMessage(new WizardMessage
+                await SendMessage(new UIMessage
                 {
                     SessionId = message.SessionId,
-                    Type = WizardMessageType.CloseSession,
+                    Type = UIMessageType.CloseSession,
                     Payload = new { Success = true },
                     MessageId = message.MessageId
                 });
@@ -976,7 +976,7 @@ namespace Launcher.Services
             }
         }
 
-        private async Task SendMessage(WizardMessage message)
+        private async Task SendMessage(UIMessage message)
         {
             try
             {
@@ -1026,9 +1026,9 @@ namespace Launcher.Services
 
         private async Task SendErrorResponse(string messageId, string error)
         {
-            var response = new WizardMessage
+            var response = new UIMessage
             {
-                Type = WizardMessageType.SessionError,
+                Type = UIMessageType.SessionError,
                 Error = error
             };
             

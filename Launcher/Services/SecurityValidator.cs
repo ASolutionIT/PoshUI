@@ -58,10 +58,11 @@ namespace Launcher.Services
                     return false;
                 }
 
-                // Must be a .ps1 file
-                if (!fullPath.EndsWith(".ps1", StringComparison.OrdinalIgnoreCase))
+                // Must be a .ps1 or .json file (JSON for module API mode)
+                if (!fullPath.EndsWith(".ps1", StringComparison.OrdinalIgnoreCase) &&
+                    !fullPath.EndsWith(".json", StringComparison.OrdinalIgnoreCase))
                 {
-                    errorMessage = "Script file must have .ps1 extension";
+                    errorMessage = "Script file must have .ps1 or .json extension";
                     AuditLogger.LogPathValidationFailure(fullPath, errorMessage);
                     return false;
                 }

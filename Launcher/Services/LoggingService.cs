@@ -28,7 +28,7 @@ namespace Launcher.Services
             }
 
             // Initialize main log file
-            InitializeLogFile("main", "Poshwizard.log");
+            InitializeLogFile("main", "PoshUI.log");
             
             // Initialize debug-specific log files if debug mode is enabled
             if (_debugEnabled)
@@ -124,7 +124,7 @@ namespace Launcher.Services
                         break;
                 }
                 
-                string logComponent = component ?? "Poshwizard";
+                string logComponent = component ?? "PoshUI";
                 string context = System.Security.Principal.WindowsIdentity.GetCurrent().Name;
                 int threadId = System.Threading.Thread.CurrentThread.ManagedThreadId;
                 string logFile = file ?? string.Empty;

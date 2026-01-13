@@ -32,6 +32,7 @@ namespace Launcher.Services
         public string Label { get; set; }
         public List<string> ValidateSetChoices { get; set; }
         public string ValidationPattern { get; set; }
+        public string ValidationScript { get; set; }
         public double? ControlWidth { get; set; }
         public bool IsSwitch { get; set; }
         public PathSelectorType PathType { get; set; } = PathSelectorType.None; // Add PathType property
@@ -40,8 +41,21 @@ namespace Launcher.Services
         public bool IsListBox { get; set; } // Display as ListBox instead of ComboBox
         public bool IsMultiSelect { get; set; } // Allow multiple selection in ListBox
         // Card properties
+        public bool IsCard { get; set; }  // True when WizardCard attribute is present
         public string CardTitle { get; set; }
         public string CardContent { get; set; }
+        public string CardImagePath { get; set; }
+        public string CardLinkUrl { get; set; }
+        public string CardLinkText { get; set; }
+        public string CardIconPath { get; set; }
+        public string CardIcon { get; set; }  // Segoe MDL2 glyph
+        public double? CardImageOpacity { get; set; }
+        public string CardBackgroundColor { get; set; }
+        public string CardTitleColor { get; set; }
+        public string CardContentColor { get; set; }
+        public int? CardCornerRadius { get; set; }
+        public string CardGradientStart { get; set; }
+        public string CardGradientEnd { get; set; }
         // Placeholder marker - true for Welcome/Summary/Branding placeholders
         public bool IsPlaceholder { get; set; }
         public bool IsNumeric { get; set; }
@@ -76,6 +90,15 @@ namespace Launcher.Services
         public List<string> DataSourceDependsOn { get; set; }
         public bool DataSourceAsync { get; set; }
         public bool DataSourceShowRefresh { get; set; }
+
+        // Script cards JSON data (from UIScriptCards attribute)
+        public string ScriptCardsJson { get; set; }
+        
+        // Banner JSON data (from UIBanner attribute)
+        public string BannerJson { get; set; }
+        
+        // Workflow tasks JSON data (from WizardWorkflowTasks attribute)
+        public string WorkflowTasksJson { get; set; }
     }
 
     public class WizardStep
@@ -92,6 +115,9 @@ namespace Launcher.Services
         public string SupportLink { get; set; }
         public string IconPath { get; set; }
         public string IconGlyph { get; set; }
+        
+        // Controls added via Add-WizardBanner, Add-WizardVisualizationCard, etc.
+        public System.Collections.IList Controls { get; set; }
     }
 
     [AttributeUsage(AttributeTargets.Parameter, AllowMultiple = false)]
@@ -144,6 +170,9 @@ namespace Launcher.Services
         public string Theme { get; set; }  // Light, Dark, or Auto
         public string OriginalScriptName { get; set; }  // For Module API: original calling script name for log files
         public string OriginalScriptPath { get; set; }  // For Module API: original calling script directory for per-execution logs
+        public bool SkipToWorkflow { get; set; }  // For resume: skip wizard pages and go directly to workflow
+        public string LogPath { get; set; }  // Custom log file path
+        public string PreviousLogFilePath { get; set; }  // For resume: previous log file to restore content from
     }
 
     [AttributeUsage(AttributeTargets.Parameter, AllowMultiple = false)]
@@ -158,6 +187,9 @@ namespace Launcher.Services
         public string Theme { get; set; }  // Light, Dark, or Auto
         public string OriginalScriptName { get; set; }  // For Module API: original calling script name
         public string OriginalScriptPath { get; set; }  // For Module API: original calling script directory
+        public string SkipToWorkflow { get; set; }  // For resume: skip wizard pages
+        public string LogPath { get; set; }  // Custom log file path
+        public string PreviousLogFilePath { get; set; }  // For resume: previous log file
     }
 
     [AttributeUsage(AttributeTargets.Parameter, AllowMultiple = false)]
@@ -277,6 +309,7 @@ namespace Launcher.Services
         public bool ShowRevealButton { get; set; } = true;
         public int MinLength { get; set; } = 0;
         public string ValidationPattern { get; set; } = "";
+        public string ValidationScript { get; set; } = "";
     }
 
     [AttributeUsage(AttributeTargets.Parameter, AllowMultiple = false)]
@@ -284,6 +317,17 @@ namespace Launcher.Services
     {
         public string CheckedLabel { get; set; } = "";
         public string UncheckedLabel { get; set; } = "";
+    }
+
+    [AttributeUsage(AttributeTargets.Parameter, AllowMultiple = false)]
+    public class WizardWorkflowTasksAttribute : Attribute
+    {
+        public string TasksJson { get; }
+
+        public WizardWorkflowTasksAttribute(string tasksJson)
+        {
+            TasksJson = tasksJson;
+        }
     }
 
 
@@ -328,6 +372,7 @@ namespace Launcher.Services
                     bool isSwitch = false;
                     List<string> validateSetChoices = null;
                     string validationPattern = null;
+                    string validationScript = null;
                     string csvFilePath = null;
                     string csvValueColumn = null;
                     PathSelectorType paramPathType = PathSelectorType.None;
@@ -336,8 +381,21 @@ namespace Launcher.Services
                     bool isListBox = false;
                     bool isMultiSelect = false;
                     // Card support (for Card pages)
+                    bool hasWizardCard = false;
                     string cardTitle = null;
                     string cardContent = null;
+                    string cardImagePath = null;
+                    string cardLinkUrl = null;
+                    string cardLinkText = null;
+                    string cardIconPath = null;
+                    string cardIcon = null;
+                    double? imageOpacity = null;
+                    string backgroundColor = null;
+                    string titleColor = null;
+                    string contentColor = null;
+                    int? cornerRadius = null;
+                    string gradientStart = null;
+                    string gradientEnd = null;
                     bool isNumeric = false;
                     double? numericMinimum = null;
                     double? numericMaximum = null;
@@ -371,6 +429,15 @@ namespace Launcher.Services
                     List<string> dataSourceDependsOn = null;
                     bool dataSourceAsync = false;
                     bool dataSourceShowRefresh = false;
+
+                    // Script cards JSON data (from UIScriptCards attribute)
+                    string scriptCardsJson = null;
+                    
+                    // Banner JSON data (from UIBanner attribute)
+                    string bannerJson = null;
+                    
+                    // Workflow tasks JSON data (from WizardWorkflowTasks attribute)
+                    string workflowTasksJson = null;
 
                     Type paramType = typeof(object);
 
@@ -436,7 +503,7 @@ namespace Launcher.Services
                         if (attributeAst is AttributeAst attr)
                         {
                             string attrTypeName = attr.TypeName.Name;
-                            LoggingService.Trace($"  Processing attribute: {attrTypeName}", component: "ReflectionService");
+                            LoggingService.Info($"  Processing attribute: {attrTypeName} (FullName: {attr.TypeName.FullName})", component: "ReflectionService");
 
                             if (attrTypeName == "WizardStep")
                                     {
@@ -700,8 +767,26 @@ namespace Launcher.Services
                                 {
                                     validationPattern = validationPatternRaw?.Trim('\'', '"');
                                 }
+                                if (TryGetNamedArgument(attr, "ValidationScript", out string validationScriptRaw))
+                                {
+                                    // ValidationScript is Base64 encoded to avoid parsing issues
+                                    var base64Script = validationScriptRaw?.Trim('\'', '"');
+                                    if (!string.IsNullOrEmpty(base64Script))
+                                    {
+                                        try
+                                        {
+                                            var bytes = Convert.FromBase64String(base64Script);
+                                            validationScript = System.Text.Encoding.UTF8.GetString(bytes);
+                                        }
+                                        catch
+                                        {
+                                            // If not valid Base64, use as-is (backward compatibility)
+                                            validationScript = base64Script;
+                                        }
+                                    }
+                                }
                                 
-                                LoggingService.Trace($"  Found WizardPassword: ShowRevealButton={passwordShowReveal}, MinLength={passwordMinLength}, ValidationPattern={validationPattern}", component: "ReflectionService");
+                                LoggingService.Trace($"  Found WizardPassword: ShowRevealButton={passwordShowReveal}, MinLength={passwordMinLength}, ValidationPattern={validationPattern}, ValidationScript={validationScript?.Substring(0, Math.Min(50, validationScript?.Length ?? 0))}...", component: "ReflectionService");
                             }
                             else if (attrTypeName == "WizardCheckBox")
                             {
@@ -717,9 +802,9 @@ namespace Launcher.Services
                                 
                                 LoggingService.Trace($"  Found WizardCheckBox: CheckedLabel={checkBoxCheckedLabel}, UncheckedLabel={checkBoxUncheckedLabel}", component: "ReflectionService");
                             }
-                            else if (attrTypeName == "WizardDataSource")
+                            else if (attrTypeName == "UIDataSource")
                             {
-                                LoggingService.Trace("  Found WizardDataSource attribute", component: "ReflectionService");
+                                LoggingService.Trace("  Found UIDataSource attribute", component: "ReflectionService");
                                 
                                 // Check for ScriptBlock (positional or named)
                                 if (attr.PositionalArguments.Count > 0)
@@ -796,6 +881,7 @@ namespace Launcher.Services
                             }
                             else if (attrTypeName == "WizardCard")
                             {
+                                hasWizardCard = true;
                                 try
                                 {
                                     // Support both named and positional arguments
@@ -811,10 +897,6 @@ namespace Launcher.Services
                                     }
 
                                     // Process PowerShell escape sequences in card content
-                                    // ConvertTo-WizardScript escapes newlines as ``n (double-backtick-n)
-                                    // so that when PowerShell reads it, it becomes `n (single backtick-n)
-                                    // But the AST stores it as the literal string with double backticks
-                                    // We need to convert ``n to actual newlines
                                     if (!string.IsNullOrEmpty(c))
                                     {
                                         c = c.Replace("``n", "\n")
@@ -832,7 +914,24 @@ namespace Launcher.Services
 
                                     cardTitle = t;
                                     cardContent = c;
-                                    LoggingService.Trace($"  Found WizardCard: Title='{cardTitle}', ContentLength={(cardContent ?? string.Empty).Length}", component: "ReflectionService");
+                                    
+                                    // Parse enhanced card properties
+                                    cardImagePath = GetAttributeValue<string>(attr, "ImagePath");
+                                    cardLinkUrl = GetAttributeValue<string>(attr, "LinkUrl");
+                                    cardLinkText = GetAttributeValue<string>(attr, "LinkText");
+                                    cardIconPath = GetAttributeValue<string>(attr, "IconPath");
+                                    cardIcon = GetAttributeValue<string>(attr, "Icon");
+                                    
+                                    // Parse styling properties
+                                    imageOpacity = GetAttributeValue<double?>(attr, "ImageOpacity");
+                                    backgroundColor = GetAttributeValue<string>(attr, "BackgroundColor");
+                                    titleColor = GetAttributeValue<string>(attr, "TitleColor");
+                                    contentColor = GetAttributeValue<string>(attr, "ContentColor");
+                                    cornerRadius = GetAttributeValue<int?>(attr, "CornerRadius");
+                                    gradientStart = GetAttributeValue<string>(attr, "GradientStart");
+                                    gradientEnd = GetAttributeValue<string>(attr, "GradientEnd");
+                                    
+                                    LoggingService.Info($"  Found WizardCard: Title='{cardTitle}', IconPath='{cardIconPath ?? "null"}', ImagePath='{cardImagePath ?? "null"}', BackgroundColor='{backgroundColor ?? "null"}', NamedArgs={attr.NamedArguments.Count}", component: "ReflectionService");
                                 }
                                 catch (Exception ex)
                                 {
@@ -870,6 +969,78 @@ namespace Launcher.Services
                                 paramType = typeof(bool);
                                 LoggingService.Trace("  Found WizardSwitch attribute - marking as switch", component: "ReflectionService");
                             }
+                            else if (attrTypeName == "UIScriptCards")
+                            {
+                                // CardGrid script cards JSON data
+                                if (attr.PositionalArguments.Count > 0)
+                                {
+                                    string jsonArg = attr.PositionalArguments[0].ToString().Trim('\'', '"');
+
+                                    // Check if Base64 encoded (new format to preserve special characters)
+                                    if (jsonArg.StartsWith("BASE64:", StringComparison.OrdinalIgnoreCase))
+                                    {
+                                        try
+                                        {
+                                            string base64Data = jsonArg.Substring(7); // Remove "BASE64:" prefix
+                                            byte[] jsonBytes = Convert.FromBase64String(base64Data);
+                                            scriptCardsJson = System.Text.Encoding.UTF8.GetString(jsonBytes);
+                                            LoggingService.Info($"  Found UIScriptCards (Base64) with {scriptCardsJson.Length} chars of JSON", component: "ReflectionService");
+                                        }
+                                        catch (Exception ex)
+                                        {
+                                            LoggingService.Error($"Failed to decode Base64 UIScriptCards: {ex.Message}", component: "ReflectionService");
+                                            scriptCardsJson = null;
+                                        }
+                                    }
+                                    else
+                                    {
+                                        // Legacy format: unescape the JSON (was escaped for PowerShell attribute syntax)
+                                        scriptCardsJson = jsonArg.Replace("`\"", "\"");
+                                        LoggingService.Info($"  Found UIScriptCards (legacy) with {scriptCardsJson.Length} chars of JSON", component: "ReflectionService");
+                                    }
+                                }
+                            }
+                            else if (attrTypeName == "UIBanner")
+                            {
+                                // Banner JSON data for wizard steps
+                                if (attr.PositionalArguments.Count > 0)
+                                {
+                                    string jsonArg = attr.PositionalArguments[0].ToString().Trim('\'', '"');
+
+                                    // Check if Base64 encoded
+                                    if (jsonArg.StartsWith("BASE64:", StringComparison.OrdinalIgnoreCase))
+                                    {
+                                        try
+                                        {
+                                            string base64Data = jsonArg.Substring(7); // Remove "BASE64:" prefix
+                                            byte[] jsonBytes = Convert.FromBase64String(base64Data);
+                                            bannerJson = System.Text.Encoding.UTF8.GetString(jsonBytes);
+                                            LoggingService.Info($"  Found UIBanner (Base64) with {bannerJson.Length} chars of JSON", component: "ReflectionService");
+                                        }
+                                        catch (Exception ex)
+                                        {
+                                            LoggingService.Error($"Failed to decode Base64 UIBanner: {ex.Message}", component: "ReflectionService");
+                                            bannerJson = null;
+                                        }
+                                    }
+                                    else
+                                    {
+                                        bannerJson = jsonArg;
+                                        LoggingService.Info($"  Found UIBanner with {bannerJson.Length} chars of JSON", component: "ReflectionService");
+                                    }
+                                }
+                            }
+                            else if (attrTypeName == "WizardWorkflowTasks")
+                            {
+                                // Workflow tasks JSON data
+                                if (attr.PositionalArguments.Count > 0)
+                                {
+                                    string jsonArg = attr.PositionalArguments[0].ToString().Trim('\'', '"');
+                                    // Unescape the JSON (was escaped for PowerShell attribute syntax)
+                                    workflowTasksJson = jsonArg.Replace("''", "'");
+                                    LoggingService.Info($"  Found WizardWorkflowTasks with {workflowTasksJson.Length} chars of JSON", component: "ReflectionService");
+                                }
+                            }
                             else if (attrTypeName == "WizardBranding")
                             {
                                 // Global branding info can be specified on any parameter
@@ -892,6 +1063,24 @@ namespace Launcher.Services
                                 if (!string.IsNullOrEmpty(theme)) branding.Theme = theme;
                                 if (!string.IsNullOrEmpty(osn)) branding.OriginalScriptName = osn;
                                 if (!string.IsNullOrEmpty(osp)) branding.OriginalScriptPath = osp;
+                                var skipToWorkflow = GetAttributeValue<string>(attr, "SkipToWorkflow");
+                                if (!string.IsNullOrEmpty(skipToWorkflow) && skipToWorkflow.Equals("true", StringComparison.OrdinalIgnoreCase))
+                                {
+                                    branding.SkipToWorkflow = true;
+                                    LoggingService.Info("  SkipToWorkflow enabled - will skip to workflow step on load", component: "ReflectionService");
+                                }
+                                var logPath = GetAttributeValue<string>(attr, "LogPath");
+                                if (!string.IsNullOrEmpty(logPath))
+                                {
+                                    branding.LogPath = logPath;
+                                    LoggingService.Info($"  Custom log path: {logPath}", component: "ReflectionService");
+                                }
+                                var prevLogPath = GetAttributeValue<string>(attr, "PreviousLogFilePath");
+                                if (!string.IsNullOrEmpty(prevLogPath))
+                                {
+                                    branding.PreviousLogFilePath = prevLogPath;
+                                    LoggingService.Info($"  Previous log file path for resume: {prevLogPath}", component: "ReflectionService");
+                                }
                                 LoggingService.Trace("  Captured WizardBranding attribute for global UI customization", component: "ReflectionService");
                             }
                         }
@@ -908,14 +1097,15 @@ namespace Launcher.Services
                         bool isPlaceholder = false;
                         string paramName = parameterAst.Name.VariablePath.UserPath;
                         
-                        // Mark placeholders for Welcome, Summary, Card, and Branding pages
+                        // Mark placeholders for Welcome, Summary, Card, Banner, and Branding pages
                         if (
                             currentStep.PageType == "Card" ||
-                            !string.IsNullOrEmpty(cardTitle) ||  // Has WizardCard attribute
+                            hasWizardCard ||  // Has WizardCard attribute (even with empty title)
+                            !string.IsNullOrEmpty(bannerJson) ||  // Has UIBanner attribute
                             paramName.EndsWith("Placeholder", StringComparison.OrdinalIgnoreCase))
                         {
                             isPlaceholder = true;
-                            LoggingService.Trace($"  Marked parameter '{paramName}' as placeholder (PageType: {currentStep.PageType})", component: "ReflectionService");
+                            LoggingService.Trace($"  Marked parameter '{paramName}' as placeholder (PageType: {currentStep.PageType}, HasBanner: {!string.IsNullOrEmpty(bannerJson)})", component: "ReflectionService");
                         }
                         
                         // Check for mandatory attribute
@@ -935,6 +1125,7 @@ namespace Launcher.Services
                             Label = paramLabel,
                             ValidateSetChoices = validateSetChoices,
                             ValidationPattern = validationPattern,
+                            ValidationScript = validationScript,
                             ControlWidth = paramControlWidth,
                             IsSwitch = isSwitch,
                             PathType = paramPathType,
@@ -942,8 +1133,21 @@ namespace Launcher.Services
                             DialogTitle = pathDialogTitle,
                             IsListBox = isListBox,
                             IsMultiSelect = isMultiSelect,
+                            IsCard = hasWizardCard,
                             CardTitle = cardTitle,
                             CardContent = cardContent,
+                            CardImagePath = cardImagePath,
+                            CardLinkUrl = cardLinkUrl,
+                            CardLinkText = cardLinkText,
+                            CardIconPath = cardIconPath,
+                            CardIcon = cardIcon,
+                            CardImageOpacity = imageOpacity,
+                            CardBackgroundColor = backgroundColor,
+                            CardTitleColor = titleColor,
+                            CardContentColor = contentColor,
+                            CardCornerRadius = cornerRadius,
+                            CardGradientStart = gradientStart,
+                            CardGradientEnd = gradientEnd,
                             IsPlaceholder = isPlaceholder,
                             IsNumeric = isNumeric,
                             NumericMinimum = numericMinimum,
@@ -976,7 +1180,16 @@ namespace Launcher.Services
                             DataSourceCsvFilter = dataSourceCsvFilter,
                             DataSourceDependsOn = dataSourceDependsOn ?? new List<string>(),
                             DataSourceAsync = dataSourceAsync,
-                            DataSourceShowRefresh = dataSourceShowRefresh
+                            DataSourceShowRefresh = dataSourceShowRefresh,
+                            
+                            // CardGrid script cards JSON
+                            ScriptCardsJson = scriptCardsJson,
+                            
+                            // Banner JSON for wizard steps
+                            BannerJson = bannerJson,
+                            
+                            // Workflow tasks JSON
+                            WorkflowTasksJson = workflowTasksJson
                         };
                         // Handle default value
                         if (parameterAst.DefaultValue != null)
@@ -1035,10 +1248,12 @@ namespace Launcher.Services
                         // Register all dynamic parameters
                         foreach (var param in dynamicParams)
                         {
-                            var attr = new WizardDataSourceAttribute();
+                            var attr = new UIDataSourceAttribute();
                             
                             if (!string.IsNullOrEmpty(param.DataSourceScriptBlock))
                             {
+                                // Pass script directly - do NOT wrap in braces
+                                // Wrapping in braces creates a nested script block literal that returns itself
                                 attr.ScriptBlock = ScriptBlock.Create(param.DataSourceScriptBlock);
                             }
                             else if (!string.IsNullOrEmpty(param.DataSourceCsvPath))
