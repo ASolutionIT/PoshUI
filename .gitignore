@@ -1,0 +1,187 @@
+## PoshUI - .gitignore for C#, PowerShell, .NET Framework, and WPF projects
+## Copyright (c) 2025 A Solution IT LLC
+
+#################
+## Visual Studio / .NET
+#################
+
+# Build Outputs
+[Bb]in/
+[Oo]bj/
+[Dd]ebug/
+[Rr]elease/
+x64/
+x86/
+[Aa]rm/
+[Aa]rm64/
+bld/
+[Oo]ut/
+
+# Visual Studio cache/options
+.vs/
+.vscode/
+.idea/
+.windsurf/
+.claude/
+*.suo
+*.user
+*.userosscache
+*.sln.docstates
+*.userprefs
+
+# Visual Studio profiler
+*.psess
+*.vsp
+*.vspx
+
+# ReSharper
+_ReSharper*/
+*.[Rr]e[Ss]harper
+*.DotSettings.user
+
+# NuGet
+*.nupkg
+*.snupkg
+**/packages/*
+!**/packages/build/
+*.nuget.props
+*.nuget.targets
+project.lock.json
+project.fragment.lock.json
+nuget.exe
+
+# Azure Trusted Signing (downloaded packages - not part of source)
+TrustedSigningClient/
+packages/
+metadata.json
+
+# MSBuild Binary and Structured Log
+*.binlog
+
+# Build Results
+[Dd]ebugPS/
+[Rr]eleasePS/
+AppPackages/
+BundleArtifacts/
+
+#################
+## Logs & Temporary Files
+#################
+
+logs/
+*.log
+*.tmp
+*.temp
+*.cache
+*.swp
+*~
+
+# PowerShell transcript logs
+PowerShell_transcript.*
+
+# CMTrace-compatible logs
+*.svclog
+
+#################
+## PowerShell
+#################
+
+# PowerShell Gallery API Keys
+*.apikey
+
+# Module build artifacts
+*.zip
+build/
+
+#################
+## WPF Specific
+#################
+
+# Expression Blend
+*.blend
+*.blendproj
+*.Generated.cs
+
+# WPF temporary generated files
+*.g.cs
+*.g.i.cs
+*.g.resources
+*.baml
+
+#################
+## Windows
+#################
+
+# Windows image file caches
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+
+# Windows shortcuts
+*.lnk
+
+#################
+## Test Results
+#################
+
+[Tt]est[Rr]esult*/
+[Bb]uild[Ll]og.*
+TestResults/
+coverage/
+*.coverage
+*.coveragexml
+*.trx
+
+# Exclude test projects
+Launcher.Tests/
+
+#################
+## Sensitive Information
+#################
+
+# Credentials and secrets
+*credentials*.json
+*secrets*.json
+*.pfx
+*.p12
+
+# Local configuration
+*.local.config
+appsettings.local.json
+
+#################
+## Project Specific
+#################
+
+# Build tools (should not be in repository)
+Microsoft.Trusted.Signing.Client/
+Microsoft.Windows.SDK.BuildTools/
+
+# Development artifacts
+claude/
+
+# Exclude utility scripts (local development only)
+Scripts/
+
+# Runtime logs from PoshUI execution
+wizard_run.log
+sequential_output.txt
+sequential_test.txt
+
+# PoshUI module logs
+PoshUI/bin/logs/*.log
+
+# Security test results (may contain sensitive data)
+SecurityTestResults.json
+
+# Build logs
+build_release_*.log
+
+#################
+## Backup Files
+#################
+
+*.bak
+*.backup
+*~
+

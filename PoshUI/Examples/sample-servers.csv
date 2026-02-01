@@ -1,0 +1,8 @@
+ServerName,Environment,IPAddress
+DEV-SERVER-01,Development,192.168.1.10
+DEV-SERVER-02,Development,192.168.1.11
+TEST-SERVER-01,Testing,192.168.2.10
+TEST-SERVER-02,Testing,192.168.2.11
+PROD-SERVER-01,Production,10.0.1.10
+PROD-SERVER-02,Production,10.0.1.11
+PROD-SERVER-03,Production,10.0.1.12
