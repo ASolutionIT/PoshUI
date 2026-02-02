@@ -72,14 +72,14 @@ $carouselItems = @(
         Title = 'PowerShell Monitoring'
         Subtitle = 'Track system resources with PowerShell'
         BackgroundColor = '#107C10'
-        LinkUrl = 'https://asolutionit.github.io/PoshUI/dashboards/'
+        LinkUrl = 'https://asolutionit.github.io/PoshUI/'
         Clickable = $true
     },
     @{
         Title = 'Dashboard Best Practices'
         Subtitle = 'Learn how to build effective dashboards'
         BackgroundColor = '#8764B8'
-        LinkUrl = 'https://asolutionit.github.io/PoshUI/dashboards/'
+        LinkUrl = 'https://asolutionit.github.io/PoshUI/'
         Clickable = $true
     }
 )

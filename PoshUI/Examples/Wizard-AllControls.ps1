@@ -100,7 +100,7 @@ $carouselItems = @(
         Subtitle = 'Explore all PoshUI control types in one comprehensive demo'
 
         BackgroundColor = '#2D5A3D'
-        LinkUrl = 'https://asolutionit.github.io/PoshUI/wizards/controls/'
+        LinkUrl = 'https://asolutionit.github.io/PoshUI/'
         Clickable = $true
     },
     @{

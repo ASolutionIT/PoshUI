@@ -84,7 +84,7 @@ $carouselItems = @(
         Title = 'PowerShell Workflows'
         Subtitle = 'Build robust automation with state management'
         BackgroundColor = '#107C10'
-        LinkUrl = 'https://asolutionit.github.io/PoshUI/workflows/'
+        LinkUrl = 'https://asolutionit.github.io/PoshUI/'
         Clickable = $true
     },
     @{
