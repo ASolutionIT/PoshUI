@@ -127,7 +127,7 @@ Add-UIBanner @welcomeBannerParams
 $welcomeCardParams = @{
     Step = 'Welcome'
     Title = 'Welcome to PoshUI'
-    Content = @'
+    Content = @"
 This wizard demonstrates every control type available in the PoshUI framework.
 
 What You'll Explore:
@@ -144,7 +144,7 @@ Theme support (Light/Dark/Auto)
 Comprehensive control library
 
 Navigate through each step to see all control types in action!
-'@
+"@
 }
 Add-UICard @welcomeCardParams
 
